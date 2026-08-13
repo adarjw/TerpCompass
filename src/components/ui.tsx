@@ -57,7 +57,7 @@ export interface ThemeColors {
 export const Palette: { light: ThemeColors; dark: ThemeColors } = {
   light: {
     text: '#2D3B45', // Canvas "ink"
-    textSecondary: '#66727C',
+    textSecondary: '#5B6770',
     background: '#F6F7F8',
     card: '#FFFFFF',
     border: '#E3E6E8',
@@ -74,7 +74,7 @@ export const Palette: { light: ThemeColors; dark: ThemeColors } = {
   },
   dark: {
     text: '#E8ECEF',
-    textSecondary: '#95A1AB',
+    textSecondary: '#A2AEB8',
     background: '#101418',
     card: '#191F24',
     border: '#2A3238',
@@ -94,6 +94,31 @@ export const Palette: { light: ThemeColors; dark: ThemeColors } = {
 export function useColors(): ThemeColors {
   const { scheme } = useApp();
   return Palette[scheme];
+}
+
+/**
+ * Stable, distinct dot colors for courses. A course's explicit color wins;
+ * otherwise its code hashes to one of these hues (chosen to read on both
+ * themes and stay distinguishable from the UMD-red accent).
+ */
+const COURSE_DOT_COLORS = [
+  '#2E86AB', // blue
+  '#7A9E2C', // olive green
+  '#8E5BB8', // purple
+  '#C77B1E', // amber
+  '#1F9E89', // teal
+  '#C2527E', // rose
+  '#5B6FD6', // indigo
+  '#946B4A', // brown
+];
+
+export function courseColor(code: string, explicit?: string): string {
+  if (explicit) return explicit;
+  let hash = 0;
+  for (let i = 0; i < code.length; i++) {
+    hash = (hash * 31 + code.charCodeAt(i)) >>> 0;
+  }
+  return COURSE_DOT_COLORS[hash % COURSE_DOT_COLORS.length];
 }
 
 // ---------- motion ----------
@@ -206,14 +231,17 @@ export function Body({
   children,
   secondary,
   style,
+  numberOfLines,
 }: {
   children: React.ReactNode;
   secondary?: boolean;
   style?: StyleProp<TextStyle>;
+  numberOfLines?: number;
 }) {
   const c = useColors();
   return (
     <Text
+      numberOfLines={numberOfLines}
       style={[
         { fontSize: 15, lineHeight: 22, fontFamily: FONT.regular, color: secondary ? c.textSecondary : c.text },
         style,

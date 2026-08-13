@@ -46,7 +46,13 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Now', tabBarIcon: icon('compass', 'compass-outline') }} />
       <Tabs.Screen
         name="schedule"
-        options={{ title: 'Schedule', tabBarIcon: icon('calendar', 'calendar-outline') }}
+        options={{
+          title: 'Schedule',
+          // The schedule screen draws its own compact app bar with week
+          // navigation, replacing the default (taller) navigator header.
+          headerShown: false,
+          tabBarIcon: icon('calendar', 'calendar-outline'),
+        }}
       />
       <Tabs.Screen
         name="dashboard"
