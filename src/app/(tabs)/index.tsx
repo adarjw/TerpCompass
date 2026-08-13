@@ -391,23 +391,23 @@ function FocusCard({
       </Row>
 
       <Card>
-        <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.text, letterSpacing: 0.2 }}>
+        <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.accent, letterSpacing: 0.2 }}>
           {course.code}
         </Text>
-        <Body secondary style={{ marginBottom: 8 }}>
-          {course.name}
-        </Body>
+        <Body style={{ fontFamily: FONT.bold, marginBottom: 6 }}>{course.name}</Body>
+        {/* UMD gold accent rule — small, deliberate brand mark. */}
+        <View style={{ width: 34, height: 3, borderRadius: 2, backgroundColor: c.gold, marginBottom: 10 }} />
         <Row style={{ marginBottom: 10, gap: 6 }}>
           {isCurrent ? <LiveDot color={c.accent} /> : null}
-          <Badge label={MEETING_COMPONENT_LABEL[session.patternLabel]} />
+          <Badge label={MEETING_COMPONENT_LABEL[session.patternLabel]} tone="accent" />
           {session.status === 'moved' ? <Badge label="Moved" tone="warning" /> : null}
         </Row>
 
-        <IconRow icon="time-outline">
+        <IconRow icon="time-outline" iconColor={c.accent}>
           {formatDateHuman(session.date)} · {formatTime12(session.startTime)}–{formatTime12(session.endTime)}
         </IconRow>
         <Pressable onPress={openDirections} accessibilityRole="button" accessibilityLabel="Open directions">
-          <IconRow icon="location-outline">
+          <IconRow icon="location-outline" iconColor={c.accent}>
             {building ? `${building} ${room}`.trim() : 'Location not set'}
             {loc && loc.name.toLowerCase() !== building.toLowerCase() ? (
               <Text style={{ color: c.textSecondary, fontSize: 13.5 }}>
@@ -432,7 +432,15 @@ function FocusCard({
         {!isCurrent ? (
           <>
             <Divider style={{ marginVertical: 10 }} />
-            <Text style={{ fontFamily: FONT.bold, fontSize: 13, color: c.textSecondary, marginBottom: 3 }}>
+            <Text
+              style={{
+                fontFamily: FONT.bold,
+                fontSize: 12,
+                color: c.accent,
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+                marginBottom: 3,
+              }}>
               Travel
             </Text>
             <Body style={{ marginBottom: 6 }}>
@@ -447,12 +455,12 @@ function FocusCard({
             {!timerOpen ? (
               <Row>
                 <View style={{ flex: 1 }}>
-                  <Button label="Directions" kind="secondary" icon="navigate-outline" onPress={openDirections} />
+                  <Button label="Directions" kind="tonal" icon="navigate-outline" onPress={openDirections} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Button
                     label="Time route"
-                    kind="secondary"
+                    kind="tonal"
                     icon="stopwatch-outline"
                     onPress={() => setTimerOpen(true)}
                   />
@@ -533,7 +541,7 @@ function FocusCard({
             <View style={{ flex: 1 }}>
               <Button
                 label="Notes"
-                kind="secondary"
+                kind="tonal"
                 icon="create-outline"
                 onPress={() => router.push(`/session/${session.id}`)}
               />

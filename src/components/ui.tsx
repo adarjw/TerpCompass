@@ -247,17 +247,21 @@ export function IconRow({
   icon,
   children,
   color,
+  iconColor,
   style,
 }: {
   icon: IconName;
   children: React.ReactNode;
+  /** Colors both icon and text. */
   color?: string;
+  /** Colors just the icon (text stays ink) — for brand accents. */
+  iconColor?: string;
   style?: StyleProp<ViewStyle>;
 }) {
   const c = useColors();
   return (
     <View style={[{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginVertical: 3 }, style]}>
-      <Icon name={icon} size={16} color={color ?? c.textSecondary} style={{ marginTop: 3 }} />
+      <Icon name={icon} size={16} color={iconColor ?? color ?? c.textSecondary} style={{ marginTop: 3 }} />
       <Body style={{ flex: 1, color: color ?? undefined }}>{children}</Body>
     </View>
   );
@@ -275,7 +279,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  kind?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  kind?: 'primary' | 'secondary' | 'tonal' | 'danger' | 'ghost';
   disabled?: boolean;
   compact?: boolean;
   icon?: IconName;
@@ -291,6 +295,8 @@ export function Button({
   const palette: Record<string, { bg: string; bgPressed: string; fg: string; border?: string }> = {
     primary: { bg: c.accent, bgPressed: c.accentPressed, fg: c.accentText },
     secondary: { bg: c.card, bgPressed: c.subtle, fg: c.text, border: c.inputBorder },
+    // Tinted brand button (iOS-style): colorful without shouting.
+    tonal: { bg: c.accent + '14', bgPressed: c.accent + '26', fg: c.accent },
     danger: { bg: c.danger, bgPressed: c.danger, fg: '#FFFFFF' },
     ghost: { bg: 'transparent', bgPressed: c.subtle, fg: c.accent },
   };
