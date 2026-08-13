@@ -94,6 +94,32 @@ describe('parseScheduleText on a full Testudo schedule', () => {
   });
 });
 
+describe('parseScheduleText section and instructor capture', () => {
+  it('captures the Testudo section number from the code line', () => {
+    const result = parseScheduleText(TESTUDO_OCR);
+    const byCode = Object.fromEntries(result.courses.map((c) => [c.code, c]));
+    expect(byCode['PHYS260'].section).toBe('0506');
+    expect(byCode['COMM107'].section).toBe('9601');
+  });
+
+  it('reads an explicit Instructor line into professor, skipping TBA', () => {
+    const withInstructor = `PHYS 260 (0506)
+Instructor: Hailu Gebremariam
+Lec TTh 3:30pm - 4:45pm EST PHY 1412
+Final TBA
+
+COMM 107 (9601)
+Instructor: TBA
+Lec TTh 12:30pm - 1:45pm EST SKN 1112`;
+    const result = parseScheduleText(withInstructor);
+    const byCode = Object.fromEntries(result.courses.map((c) => [c.code, c]));
+    expect(byCode['PHYS260'].professor).toBe('Hailu Gebremariam');
+    expect(byCode['COMM107'].professor).toBe('');
+    // The instructor line must not be mistaken for the course name.
+    expect(byCode['PHYS260'].name).toBe('PHYS260');
+  });
+});
+
 describe('parseScheduleText OCR-noise tolerance', () => {
   it('repairs letter-O-for-zero inside times and strips table artifacts', () => {
     const noisy = `PHYS 260 (0506)

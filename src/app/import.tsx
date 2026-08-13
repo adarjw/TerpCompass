@@ -49,6 +49,7 @@ import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
 import { pickDocument, readTextFile, validateImportedFile } from '@/services/files';
 import { OCR_AVAILABLE, ocrImage } from '@/services/ocr';
 import { fetchEnrichment } from '@/services/planetterp';
+import { fetchSectionProfessor } from '@/services/umdio';
 import { useApp } from '@/state/AppContext';
 
 type Draft = CourseDraft & { attendancePolicy?: string; walkingBufferMin?: number };
@@ -203,8 +204,8 @@ export default function ImportScreen() {
   };
 
   const importDrafts = async (draftsArg: Draft[], eventsArg: CalendarEventDraft[]) => {
-    if (!db) return [] as Course[];
-    const imported: Course[] = [];
+    if (!db) return [] as { course: Course; section?: string }[];
+    const imported: { course: Course; section?: string }[] = [];
     for (const draft of draftsArg) {
       const course: Course = {
         id: makeId(),
@@ -230,7 +231,7 @@ export default function ImportScreen() {
       await coursesRepo.upsert(db, course);
       await patternsRepo.insertMany(db, patternRows);
       await sessionsRepo.insertMany(db, generateSessions(course, patternRows, makeId));
-      imported.push(course);
+      imported.push({ course, section: draft.section });
     }
     if (eventsArg.length > 0) await eventsRepo.insertMany(db, eventsArg);
     bump();
@@ -239,16 +240,25 @@ export default function ImportScreen() {
   };
 
   /**
-   * Fetch PlanetTerp info for freshly imported courses: real titles fill in
-   * (screenshot imports only carry codes), and ratings/attendance hints get
-   * cached for each course page. Failures are per-course and non-fatal.
+   * Enrich freshly imported courses: resolve the professor from the scanned
+   * section number (registrar Schedule of Classes; umd.io fallback), then
+   * fetch PlanetTerp so titles, ratings, and attendance hints target that
+   * professor. Failures are per-course and non-fatal.
    */
-  const enrichImported = async (imported: Course[]) => {
+  const enrichImported = async (imported: { course: Course; section?: string }[]) => {
     if (!db) return 0;
     let enriched = 0;
     for (let i = 0; i < imported.length; i++) {
-      const course = imported[i];
-      setImportStatus(`Fetching PlanetTerp info… ${i + 1}/${imported.length} (${course.code})`);
+      let { course } = imported[i];
+      const { section } = imported[i];
+      setImportStatus(`Looking up ${course.code}… ${i + 1}/${imported.length}`);
+      if (!course.professor && section) {
+        const prof = await fetchSectionProfessor(course.code, course.semesterStart, section);
+        if (prof) {
+          course = { ...course, professor: prof };
+          await coursesRepo.upsert(db, course);
+        }
+      }
       const result = await fetchEnrichment(course.code, course.professor, course.semesterStart);
       if (!result.ok) continue;
       await planetTerpCacheRepo.set(db, course.code, result.value);
@@ -523,8 +533,9 @@ export default function ImportScreen() {
                 })}>
                 <Icon name={ptFetch ? 'checkbox' : 'square-outline'} size={20} color={ptFetch ? c.accent : undefined} />
                 <Body secondary style={{ flex: 1, fontSize: 13.5 }}>
-                  Also fetch PlanetTerp info — real course names, professor ratings, and what
-                  reviews say about attendance.
+                  Also look up each section&apos;s professor (Testudo Schedule of Classes) and
+                  fetch PlanetTerp info — real course names, ratings, and what reviews say about
+                  attendance.
                 </Body>
               </Pressable>
               <Button

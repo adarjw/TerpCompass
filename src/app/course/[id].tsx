@@ -66,6 +66,7 @@ export default function CourseScreen() {
   const [enrich, setEnrich] = useState<PlanetTerpEnrichment | null>(null);
   const [enrichBusy, setEnrichBusy] = useState(false);
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
+  const [showAllProfs, setShowAllProfs] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -291,12 +292,20 @@ export default function CourseScreen() {
                               Teaching this semester or recently:
                             </Body>
                             <Row style={{ flexWrap: 'wrap', marginBottom: 6 }}>
-                              {current.map((name) => (
+                              {(showAllProfs ? current : current.slice(0, 8)).map((name) => (
                                 <View key={name} style={{ minWidth: 120 }}>
                                   <Button label={name} kind="tonal" compact onPress={() => setProfessor(name)} />
                                 </View>
                               ))}
                             </Row>
+                            {current.length > 8 && !showAllProfs ? (
+                              <Button
+                                label={`Show all ${current.length}`}
+                                kind="ghost"
+                                compact
+                                onPress={() => setShowAllProfs(true)}
+                              />
+                            ) : null}
                           </>
                         ) : null}
                         {historical.length > 0 ? (

@@ -31,6 +31,10 @@ export interface ScheduleTextResult {
 }
 
 const CODE_RE = /\b([A-Z]{4}\d{3}[A-Z]?|[A-Z]{2,4}\s?\d{3}[A-Z]?)\b/;
+/** Testudo section number in parentheses right after the code: "(0506)". */
+const SECTION_RE = /\(\s*([0-9]{4}[A-Z0-9]{0,2})\s*\)/;
+/** Explicit instructor line, shown when a Testudo section tab is expanded. */
+const INSTRUCTOR_RE = /^\s*instructors?:?\s+(.{3,60})$/i;
 const TIME_RANGE_RE =
   /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|—|~|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
 /**
@@ -175,6 +179,22 @@ export function parseScheduleText(text: string): ScheduleTextResult {
     const code = codeMatch[1].replace(/\s+/g, '');
     const lines = block.split('\n');
 
+    // Section number from the code line ("PHYS 260 (0506)") — lets the
+    // importer look up exactly who teaches this section on Testudo.
+    const codeLine = lines.find((l) => CODE_RE.test(l)) ?? '';
+    const section = SECTION_RE.exec(codeLine)?.[1];
+
+    // Explicit "Instructor: Name" line (visible when a section tab is
+    // expanded before screenshotting). Never guessed from bare name lines.
+    let professor = '';
+    for (const l of lines) {
+      const m = INSTRUCTOR_RE.exec(l);
+      if (m && !/tba|staff/i.test(m[1])) {
+        professor = m[1].trim().replace(/[.,;]+$/, '');
+        break;
+      }
+    }
+
     // Course name: first line without the code and not a component/location row.
     let name = '';
     for (const l of lines) {
@@ -184,7 +204,7 @@ export function parseScheduleText(text: string): ScheduleTextResult {
         !COMPONENT_LINE_RE.test(l) &&
         !/^\d/.test(stripped) &&
         !LOCATION_RE.test(l) &&
-        !/section|face-to-face|online|blended/i.test(stripped)
+        !/section|face-to-face|online|blended|instructor|seats|waitlist/i.test(stripped)
       ) {
         name = stripped.replace(/^[-:–(]\s*/, '').replace(/[)\s]+$/, '');
         break;
@@ -269,7 +289,8 @@ export function parseScheduleText(text: string): ScheduleTextResult {
     courses.push({
       code,
       name: name || code,
-      professor: '',
+      professor,
+      section,
       patterns,
     });
   }

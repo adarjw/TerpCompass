@@ -28,6 +28,8 @@ export interface CourseDraft {
   code: string;
   name: string;
   professor: string;
+  /** Testudo section number ("0506") when the source text included one. */
+  section?: string;
   semesterStart: string;
   semesterEnd: string;
   patterns: PatternDraft[];
