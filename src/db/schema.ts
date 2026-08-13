@@ -1,6 +1,6 @@
 /** SQLite DDL. Version-gated so future migrations are additive. */
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS courses (
@@ -154,7 +154,9 @@ CREATE TABLE IF NOT EXISTS class_notes (
   course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   timestamp TEXT NOT NULL,
   text TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  photo_uri TEXT,
+  photo_mode TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_notes_session ON class_notes(session_id);
 

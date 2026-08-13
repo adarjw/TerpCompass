@@ -13,9 +13,17 @@ import { chunkResourceText } from '../lib/syllabus';
 import type { Resource, ResourceKind } from '../lib/types';
 
 const RESOURCE_DIR = 'resources';
+const NOTE_PHOTO_DIR = 'note-photos';
+const SANDBOX_DIRS = [RESOURCE_DIR, NOTE_PHOTO_DIR];
 
 function resourcesDir(): Directory {
   const dir = new Directory(Paths.document, RESOURCE_DIR);
+  if (!dir.exists) dir.create({ intermediates: true });
+  return dir;
+}
+
+function sandboxDir(name: string): Directory {
+  const dir = new Directory(Paths.document, name);
   if (!dir.exists) dir.create({ intermediates: true });
   return dir;
 }
@@ -68,12 +76,32 @@ export function validateImportedFile(name: string, size: number | null): string 
 }
 
 /** Copy a picked file into the app sandbox; returns the sandboxed URI. */
-export function copyIntoSandbox(picked: PickedDocument): string {
-  const dir = resourcesDir();
+export function copyIntoSandbox(picked: PickedDocument, dirName: string = RESOURCE_DIR): string {
+  const dir = dirName === RESOURCE_DIR ? resourcesDir() : sandboxDir(dirName);
   const safeName = picked.name.replace(/[^\w.\- ]+/g, '_');
   const dest = new File(dir, `${makeId()}-${safeName}`);
   new File(picked.uri).copySync(dest);
   return dest.uri;
+}
+
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.heic', '.webp']);
+
+/** Validation for a picked note photo — separate list from document imports. */
+export function validateImportedImage(name: string, size: number | null): string | null {
+  const dot = name.lastIndexOf('.');
+  const ext = dot >= 0 ? name.slice(dot).toLowerCase() : '';
+  if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+    return `Unsupported image type "${ext || 'none'}". Supported: JPG, PNG, HEIC, WEBP.`;
+  }
+  if (size != null && size > MAX_FILE_BYTES) {
+    return 'Photo is larger than 25 MB. Please attach a smaller image.';
+  }
+  return null;
+}
+
+/** Copy a picked note photo into its own sandbox subdirectory. */
+export function copyNotePhotoIntoSandbox(picked: PickedDocument): string {
+  return copyIntoSandbox(picked, NOTE_PHOTO_DIR);
 }
 
 export async function readTextFile(uri: string): Promise<string> {
@@ -230,13 +258,15 @@ export function deleteSandboxFile(uri: string | undefined): void {
   }
 }
 
-/** Remove every stored resource file (used by "Delete all local data"). */
+/** Remove every stored resource/photo file (used by "Delete all local data"). */
 export function deleteAllSandboxFiles(): void {
-  try {
-    const dir = new Directory(Paths.document, RESOURCE_DIR);
-    if (dir.exists) dir.delete();
-  } catch {
-    // Best effort.
+  for (const name of SANDBOX_DIRS) {
+    try {
+      const dir = new Directory(Paths.document, name);
+      if (dir.exists) dir.delete();
+    } catch {
+      // Best effort.
+    }
   }
 }
 

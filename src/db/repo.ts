@@ -646,6 +646,8 @@ function rowToNote(r: SqlRow): ClassNote {
     timestamp: str(r.timestamp),
     text: str(r.text),
     createdAt: str(r.created_at),
+    photoUri: strOrU(r.photo_uri),
+    photoMode: strOrU(r.photo_mode) as ClassNote['photoMode'],
   };
 }
 
@@ -666,8 +668,9 @@ export const notesRepo = {
   },
   async insert(db: SqlExecutor, n: ClassNote): Promise<void> {
     await db.runAsync(
-      `INSERT INTO class_notes (id, session_id, course_id, timestamp, text, created_at) VALUES (?,?,?,?,?,?)`,
-      [n.id, n.sessionId, n.courseId, n.timestamp, n.text, n.createdAt],
+      `INSERT INTO class_notes (id, session_id, course_id, timestamp, text, created_at, photo_uri, photo_mode)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [n.id, n.sessionId, n.courseId, n.timestamp, n.text, n.createdAt, n.photoUri ?? null, n.photoMode ?? null],
     );
   },
   async remove(db: SqlExecutor, id: string): Promise<void> {
