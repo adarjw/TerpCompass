@@ -6,7 +6,7 @@
 
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Animated, Easing, Linking, Platform, ScrollView, Text, View } from 'react-native';
+import { Animated, Easing, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 import {
   Badge,
@@ -30,6 +30,7 @@ import {
   chunksRepo,
   coursesRepo,
   locationsRepo,
+  resourcesRepo,
   sessionsRepo,
   walkRecordingsRepo,
 } from '@/db/repo';
@@ -54,6 +55,8 @@ interface HomeData {
   walkRecordings: WalkRecording[];
   /** Best guess at where the user is walking from, for the "next" session. */
   impliedFromLabel: 'previous_class' | 'dorm';
+  /** Whether the focused session's course has a syllabus attached. */
+  focusHasSyllabus: boolean;
 }
 
 const WALK_START_OPTIONS: WalkStartPoint[] = [
@@ -118,6 +121,12 @@ export default function HomeScreen() {
           if (hasPriorToday) impliedFromLabel = 'previous_class';
         }
       }
+      const focusSC = info.current ?? info.next;
+      let focusHasSyllabus = false;
+      if (focusSC) {
+        const focusResources = await resourcesRepo.forCourse(db, focusSC.course.id);
+        focusHasSyllabus = focusResources.some((r) => r.kind === 'syllabus');
+      }
       setData({
         current: info.current,
         next: info.next,
@@ -127,6 +136,7 @@ export default function HomeScreen() {
         buildings,
         importanceBySession,
         hasCourses: courses.length > 0,
+        focusHasSyllabus,
       });
       setError(null);
     } catch (e) {
@@ -223,6 +233,7 @@ export default function HomeScreen() {
             settings={settings}
             walkRecordings={data.walkRecordings}
             impliedFromLabel={data.impliedFromLabel}
+            hasSyllabus={data.focusHasSyllabus}
             onAttended={() => markAttended(focus)}
             onAbsent={() => router.push(`/absence/${focus.session.id}`)}
             onWalkTimed={bump}
@@ -284,6 +295,7 @@ function FocusCard({
   settings,
   walkRecordings,
   impliedFromLabel,
+  hasSyllabus,
   onAttended,
   onAbsent,
   onWalkTimed,
@@ -296,11 +308,13 @@ function FocusCard({
   settings: ReturnType<typeof useApp>['settings'];
   walkRecordings: WalkRecording[];
   impliedFromLabel: 'previous_class' | 'dorm';
+  hasSyllabus: boolean;
   onAttended: () => void;
   onAbsent: () => void;
   onWalkTimed: () => void;
 }) {
   const c = useColors();
+  const [timerOpen, setTimerOpen] = useState(false);
   const { session, course } = sc;
   const building = session.overrideBuilding ?? session.building;
   const room = session.overrideRoom ?? session.room;
@@ -317,145 +331,220 @@ function FocusCard({
   const leave = start ? leaveAt(start, walk, course) : null;
   const msUntilStart = start ? start.getTime() - now.getTime() : 0;
   const msUntilLeave = leave ? leave.getTime() - now.getTime() : 0;
-  const leaveUrgent = !isCurrent && leave != null && msUntilLeave <= 0;
+  const minsUntilLeave = Math.ceil(msUntilLeave / 60000);
+  const daysAway = Math.ceil(msUntilStart / 86400000);
 
   const openDirections = () => {
     Linking.openURL(bestMapUrl(loc, building || course.code, Platform.OS === 'ios'));
   };
+
+  // Progressive urgency for the header's right side: far-off classes stay
+  // quiet ("17 days away"), same-day emphasizes the leave time, and only
+  // the truly urgent state gets the accent color.
+  let urgency: { text: string; color: string; bold: boolean };
+  if (isCurrent) {
+    urgency = { text: `Ends ${formatTime12(session.endTime)}`, color: c.textSecondary, bold: false };
+  } else if (msUntilStart > 24 * 3600 * 1000) {
+    urgency = { text: `${daysAway} days away`, color: c.textSecondary, bold: false };
+  } else if (leave && minsUntilLeave <= 0) {
+    urgency = { text: 'Leave now', color: c.accent, bold: true };
+  } else if (leave && minsUntilLeave <= 15) {
+    urgency = { text: `Leave in ${minsUntilLeave} min`, color: c.accent, bold: true };
+  } else if (leave) {
+    urgency = {
+      text: `Leave by ${leave.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`,
+      color: c.text,
+      bold: true,
+    };
+  } else {
+    urgency = { text: formatCountdown(msUntilStart), color: c.text, bold: true };
+  }
 
   const walkSourceNote =
     walk.source === 'override'
       ? 'your override'
       : walk.source === 'recorded'
         ? `avg of ${walk.sampleCount} timed walk${walk.sampleCount === 1 ? '' : 's'}`
-        : walk.source === 'default'
-          ? 'estimate'
-          : 'by distance';
+        : 'estimate';
 
   return (
-    <Card style={{ paddingVertical: 18 }}>
-      <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-        <Row style={{ gap: 8 }}>
-          {isCurrent ? <LiveDot color={c.accent} /> : null}
-          <Badge label={isCurrent ? 'In session' : 'Up next'} tone={isCurrent ? 'accent' : 'neutral'} />
-          {session.status === 'moved' ? <Badge label="Moved" tone="warning" /> : null}
-        </Row>
-        <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary }}>
-          {MEETING_COMPONENT_LABEL[session.patternLabel]}
+    <View>
+      <Row style={{ justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 2 }}>
+        <Text
+          style={{
+            fontFamily: FONT.bold,
+            fontSize: 12.5,
+            color: c.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.8,
+          }}>
+          {isCurrent ? 'In session' : 'Next class'}
+        </Text>
+        <Text
+          style={{
+            fontFamily: urgency.bold ? FONT.bold : FONT.regular,
+            fontSize: 13.5,
+            color: urgency.color,
+          }}>
+          {urgency.text}
         </Text>
       </Row>
 
-      <Text style={{ fontFamily: FONT.black, fontSize: 24, color: c.text, letterSpacing: 0.2 }}>
-        {course.code}
-      </Text>
-      <Body secondary style={{ marginBottom: 12 }}>
-        {course.name}
-      </Body>
+      <Card>
+        <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.text, letterSpacing: 0.2 }}>
+          {course.code}
+        </Text>
+        <Body secondary style={{ marginBottom: 8 }}>
+          {course.name}
+        </Body>
+        <Row style={{ marginBottom: 10, gap: 6 }}>
+          {isCurrent ? <LiveDot color={c.accent} /> : null}
+          <Badge label={MEETING_COMPONENT_LABEL[session.patternLabel]} />
+          {session.status === 'moved' ? <Badge label="Moved" tone="warning" /> : null}
+        </Row>
 
-      <IconRow icon="time-outline">
-        {formatDateHuman(session.date)} · {formatTime12(session.startTime)}–{formatTime12(session.endTime)}
-      </IconRow>
-      <IconRow icon="location-outline">
-        {building ? `${building} ${room}`.trim() : 'Location not set'}
-        {loc?.entranceNotes ? (
-          <Text style={{ color: c.textSecondary, fontSize: 13.5 }}>
-            {'\n'}
-            {loc.entranceNotes}
-          </Text>
-        ) : null}
-      </IconRow>
-      {course.professor ? <IconRow icon="person-outline">{course.professor}</IconRow> : null}
-      {session.changeNote ? (
-        <IconRow icon="information-circle-outline" color={c.warning}>
-          {session.changeNote}
+        <IconRow icon="time-outline">
+          {formatDateHuman(session.date)} · {formatTime12(session.startTime)}–{formatTime12(session.endTime)}
         </IconRow>
-      ) : null}
-
-      <Divider />
-
-      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <View>
-          <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary, marginBottom: 2 }}>
-            {isCurrent ? 'Status' : 'Starts in'}
-          </Text>
-          <Text
-            style={{
-              fontFamily: FONT.black,
-              fontSize: 30,
-              color: c.text,
-              fontVariant: ['tabular-nums'],
-              lineHeight: 34,
-            }}>
-            {isCurrent ? 'In progress' : formatCountdown(msUntilStart)}
-          </Text>
-        </View>
-        {!isCurrent && leave ? (
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary, marginBottom: 2 }}>
-              {walk.minutes} min walk · {walkSourceNote}
-            </Text>
-            <Text
-              style={{
-                fontFamily: FONT.bold,
-                fontSize: 16,
-                color: leaveUrgent ? c.danger : c.text,
-              }}>
-              {leaveUrgent
-                ? 'Leave now'
-                : `Leave by ${leave.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
-            </Text>
-          </View>
-        ) : null}
-      </Row>
-
-      {!isCurrent ? <WalkTimerWidget toBuilding={building} onSaved={onWalkTimed} /> : null}
-
-      {importance ? (
-        <>
-          <Divider />
-          <IconRow
-            icon={
-              importance.level === 'critical' || importance.level === 'high'
-                ? 'flame-outline'
-                : importance.level === 'unknown'
-                  ? 'help-circle-outline'
-                  : 'pulse-outline'
-            }
-            color={
-              importance.level === 'critical'
-                ? c.danger
-                : importance.level === 'high'
-                  ? c.warning
-                  : undefined
-            }>
-            {IMPORTANCE_LABEL[importance.level]}
+        <Pressable onPress={openDirections} accessibilityRole="button" accessibilityLabel="Open directions">
+          <IconRow icon="location-outline">
+            {building ? `${building} ${room}`.trim() : 'Location not set'}
+            {loc && loc.name.toLowerCase() !== building.toLowerCase() ? (
+              <Text style={{ color: c.textSecondary, fontSize: 13.5 }}>
+                {'\n'}
+                {loc.name}
+              </Text>
+            ) : null}
+            {loc?.entranceNotes ? (
+              <Text style={{ color: c.textSecondary, fontSize: 13 }}>
+                {'\n'}
+                {loc.entranceNotes}
+              </Text>
+            ) : null}
           </IconRow>
-          {importance.reasons.slice(0, 3).map((r, i) => (
-            <Body key={i} secondary style={{ fontSize: 13, marginLeft: 24, lineHeight: 19 }}>
-              {r}
-              {importance.citations[i]
-                ? `  (${importance.citations[i].sourceFilename}${importance.citations[i].page ? `, p.${importance.citations[i].page}` : ''})`
-                : ''}
+        </Pressable>
+        {session.changeNote ? (
+          <IconRow icon="information-circle-outline" color={c.warning}>
+            {session.changeNote}
+          </IconRow>
+        ) : null}
+
+        {!isCurrent ? (
+          <>
+            <Divider style={{ marginVertical: 10 }} />
+            <Text style={{ fontFamily: FONT.bold, fontSize: 13, color: c.textSecondary, marginBottom: 3 }}>
+              Travel
+            </Text>
+            <Body style={{ marginBottom: 6 }}>
+              {walk.minutes} min walk ({walkSourceNote})
+              {leave ? (
+                <Text style={{ fontFamily: FONT.bold, color: minsUntilLeave <= 15 ? c.accent : c.text }}>
+                  {' '}
+                  · {minsUntilLeave <= 0 ? 'leave now' : `leave by ${leave.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
+                </Text>
+              ) : null}
             </Body>
-          ))}
-        </>
-      ) : null}
+            {!timerOpen ? (
+              <Row>
+                <View style={{ flex: 1 }}>
+                  <Button label="Directions" kind="secondary" icon="navigate-outline" onPress={openDirections} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Time this route"
+                    kind="secondary"
+                    icon="stopwatch-outline"
+                    onPress={() => setTimerOpen(true)}
+                  />
+                </View>
+              </Row>
+            ) : (
+              <WalkTimerWidget
+                toBuilding={building}
+                onSaved={onWalkTimed}
+                onClosed={() => setTimerOpen(false)}
+              />
+            )}
+          </>
+        ) : null}
 
-      <Divider />
+        {!hasSyllabus ? (
+          <>
+            <Divider style={{ marginVertical: 10 }} />
+            <Row style={{ justifyContent: 'space-between' }}>
+              <Row style={{ gap: 8, flex: 1 }}>
+                <Icon name="book-outline" size={16} />
+                <Body secondary style={{ fontSize: 13.5 }}>
+                  No syllabus linked
+                </Body>
+              </Row>
+              <Button
+                label="Add"
+                kind="secondary"
+                compact
+                onPress={() => router.push(`/course/${course.id}`)}
+              />
+            </Row>
+          </>
+        ) : null}
 
-      <Row style={{ justifyContent: 'space-around', marginBottom: 6 }}>
-        <TextLink label="Directions" icon="navigate-outline" onPress={openDirections} />
-        <TextLink label="Notes" icon="create-outline" onPress={() => router.push(`/session/${session.id}`)} />
-      </Row>
-      <Row>
-        <View style={{ flex: 1 }}>
-          <Button label="Mark attended" icon="checkmark" onPress={onAttended} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button label="Can't make it" kind="secondary" onPress={onAbsent} />
-        </View>
-      </Row>
-    </Card>
+        {importance && importance.level !== 'unknown' ? (
+          <>
+            <Divider style={{ marginVertical: 10 }} />
+            <IconRow
+              icon={
+                importance.level === 'critical' || importance.level === 'high'
+                  ? 'flame-outline'
+                  : 'pulse-outline'
+              }
+              color={
+                importance.level === 'critical'
+                  ? c.danger
+                  : importance.level === 'high'
+                    ? c.warning
+                    : undefined
+              }>
+              {IMPORTANCE_LABEL[importance.level]}
+            </IconRow>
+            {importance.reasons.slice(0, 2).map((r, i) => (
+              <Body key={i} secondary style={{ fontSize: 13, marginLeft: 24, lineHeight: 19 }}>
+                {r}
+                {importance.citations[i]
+                  ? `  (${importance.citations[i].sourceFilename}${importance.citations[i].page ? `, p.${importance.citations[i].page}` : ''})`
+                  : ''}
+              </Body>
+            ))}
+          </>
+        ) : null}
+
+        <Divider style={{ marginVertical: 10 }} />
+
+        {isCurrent ? (
+          <Row>
+            <View style={{ flex: 1 }}>
+              <Button label="Mark attended" icon="checkmark" onPress={onAttended} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Can't make it" kind="secondary" onPress={onAbsent} />
+            </View>
+          </Row>
+        ) : (
+          <Row>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Notes"
+                kind="secondary"
+                icon="create-outline"
+                onPress={() => router.push(`/session/${session.id}`)}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label="Mark absent" kind="secondary" onPress={onAbsent} />
+            </View>
+          </Row>
+        )}
+      </Card>
+    </View>
   );
 }
 
@@ -490,10 +579,21 @@ function formatElapsed(totalSeconds: number): string {
  * average instead of a straight-line guess. Nothing here assumes GPS —
  * it's a plain stopwatch the user starts and stops themselves.
  */
-function WalkTimerWidget({ toBuilding, onSaved }: { toBuilding: string; onSaved: () => void }) {
+function WalkTimerWidget({
+  toBuilding,
+  onSaved,
+  onClosed,
+}: {
+  toBuilding: string;
+  onSaved: () => void;
+  /** When provided, the widget opens immediately and closing unmounts it. */
+  onClosed?: () => void;
+}) {
   const { db } = useApp();
   const c = useColors();
-  const [stage, setStage] = useState<'closed' | 'picking' | 'ready' | 'running' | 'saved'>('closed');
+  const [stage, setStage] = useState<'closed' | 'picking' | 'ready' | 'running' | 'saved'>(
+    onClosed ? 'picking' : 'closed',
+  );
   const [from, setFrom] = useState<WalkStartPoint | null>(null);
   const [otherText, setOtherText] = useState('');
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -506,6 +606,10 @@ function WalkTimerWidget({ toBuilding, onSaved }: { toBuilding: string; onSaved:
   }, [stage, startedAt]);
 
   const reset = () => {
+    if (onClosed) {
+      onClosed();
+      return;
+    }
     setStage('closed');
     setFrom(null);
     setOtherText('');
