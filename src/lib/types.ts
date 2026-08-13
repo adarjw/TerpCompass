@@ -98,6 +98,10 @@ export interface ClassNote {
   timestamp: string;
   text: string;
   createdAt: string; // ISO
+  /** Local sandbox URI of an attached photo, if any (board/notebook shot). */
+  photoUri?: string;
+  /** 'raw' stores the photo untouched; 'cropped' auto-trims the margins. */
+  photoMode?: 'raw' | 'cropped';
 }
 
 /**

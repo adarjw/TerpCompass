@@ -1,6 +1,6 @@
 /** SQLite DDL. Version-gated so future migrations are additive. */
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 7;
 
 export const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS courses (
@@ -154,7 +154,9 @@ CREATE TABLE IF NOT EXISTS class_notes (
   course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   timestamp TEXT NOT NULL,
   text TEXT NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  photo_uri TEXT,
+  photo_mode TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_notes_session ON class_notes(session_id);
 
@@ -176,6 +178,17 @@ CREATE TABLE IF NOT EXISTS planetterp_cache (
   course_code TEXT PRIMARY KEY,
   payload TEXT NOT NULL,
   fetched_at TEXT NOT NULL
+);
+
+-- Web-only sandbox storage: expo-file-system's File/Directory classes have
+-- no web implementation, so a picked file's bytes are stored here instead
+-- (see services/files.ts), addressed by a synthetic "sandbox-blob://<id>"
+-- URI. Unused on native, which has a real sandbox directory on disk.
+CREATE TABLE IF NOT EXISTS sandbox_blobs (
+  id TEXT PRIMARY KEY,
+  mime_type TEXT NOT NULL,
+  bytes BLOB NOT NULL,
+  created_at TEXT NOT NULL
 );
 `;
 
