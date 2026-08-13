@@ -98,7 +98,7 @@ export default function SessionScreen() {
             <Body>
               {formatDateHuman(session.date)} · {formatTime12(session.startTime)}–{formatTime12(session.endTime)}
             </Body>
-            <Badge label={session.status.toUpperCase()} />
+            <Badge label={session.status} />
           </Row>
           <Body secondary>{where || 'Location not set'}</Body>
           {session.status === 'scheduled' || session.status === 'moved' ? (
@@ -137,7 +137,7 @@ export default function SessionScreen() {
                   {n.timestamp}
                 </Body>
                 <Body style={{ flex: 1 }}>{n.text}</Body>
-                <Button label="✕" kind="ghost" compact onPress={() => removeNote(n.id)} />
+                <Button label="Remove" icon="trash-outline" kind="ghost" compact onPress={() => removeNote(n.id)} />
               </Row>
             </Card>
           ))

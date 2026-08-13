@@ -1,26 +1,29 @@
 /**
  * Home — answers "Where am I supposed to be right now?"
- * Current/next class, countdown, leave-now time, walking estimate,
- * attendance importance, and one-tap attended/absence actions.
+ * One quiet card: status, course, detail rows, countdown, leave-by line,
+ * attendance importance, actions. Color only where it means something.
  */
 
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Linking, Platform, ScrollView, Text, View } from 'react-native';
+import { Animated, Easing, Linking, Platform, ScrollView, Text, View } from 'react-native';
 
 import {
   Badge,
   Body,
   Button,
   Card,
+  Divider,
   EmptyState,
   ErrorBox,
   Field,
+  FONT,
+  Icon,
+  IconRow,
   Loading,
   Row,
   Screen,
-  Subtitle,
-  Title,
+  TextLink,
   useColors,
 } from '@/components/ui';
 import {
@@ -37,7 +40,7 @@ import { IMPORTANCE_LABEL, scoreSessionImportance } from '@/lib/importance';
 import { whereShouldIBe, sessionEnd, sessionStart, type SessionWithCourse } from '@/lib/sessions';
 import { formatCountdown, formatDateHuman, formatTime12 } from '@/lib/time';
 import type { CampusLocation, SessionImportance, WalkRecording, WalkStartPoint } from '@/lib/types';
-import { WALK_START_POINT_LABEL } from '@/lib/types';
+import { MEETING_COMPONENT_LABEL, WALK_START_POINT_LABEL } from '@/lib/types';
 import { bestMapUrl, estimateWalkWithRecordings, leaveAt, type WalkEstimate } from '@/lib/walking';
 import { useApp } from '@/state/AppContext';
 
@@ -154,22 +157,40 @@ export default function HomeScreen() {
   };
 
   const focus = data.current ?? data.next;
+  const todayLabel = now.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
 
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+        <Text
+          style={{
+            fontFamily: FONT.regular,
+            fontSize: 13,
+            color: c.textSecondary,
+            marginBottom: 10,
+            textTransform: 'uppercase',
+            letterSpacing: 0.6,
+          }}>
+          {todayLabel}
+        </Text>
         {error ? <ErrorBox message={error} /> : null}
 
         {!data.hasCourses ? (
           <>
             <EmptyState
+              icon="school-outline"
               title="No classes yet"
-              hint="Import your schedule from an .ics or CSV file, paste text copied from a schedule screenshot, or add classes manually. You can also load demo UMD classes to explore the app."
+              hint="Import your schedule from an .ics or CSV file, paste text copied from a schedule screenshot, or add classes manually."
             />
-            <Button label="Import schedule" onPress={() => router.push('/import')} />
+            <Button label="Import schedule" icon="download-outline" onPress={() => router.push('/import')} />
             <Button
               label="Add a class manually"
               kind="secondary"
+              icon="add"
               onPress={() => router.push('/course-edit')}
             />
             <Button
@@ -186,6 +207,7 @@ export default function HomeScreen() {
         ) : !focus ? (
           <>
             <EmptyState
+              icon="cafe-outline"
               title="Nothing on the schedule"
               hint="No upcoming classes found. Enjoy the break — or check the Schedule tab to make sure your semester dates are right."
             />
@@ -209,28 +231,41 @@ export default function HomeScreen() {
 
         {data.current && data.next ? (
           <Card>
-            <Subtitle>After this</Subtitle>
-            <Body>
-              {data.next.course.code} at {formatTime12(data.next.session.startTime)} —{' '}
-              {[data.next.session.overrideBuilding ?? data.next.session.building, data.next.session.overrideRoom ?? data.next.session.room]
-                .filter(Boolean)
-                .join(' ')}
-            </Body>
+            <Row style={{ gap: 10 }}>
+              <Icon name="arrow-forward-circle-outline" size={20} />
+              <View style={{ flex: 1 }}>
+                <Body secondary style={{ fontSize: 13 }}>
+                  After this
+                </Body>
+                <Body>
+                  {data.next.course.code} at {formatTime12(data.next.session.startTime)} ·{' '}
+                  {[
+                    data.next.session.overrideBuilding ?? data.next.session.building,
+                    data.next.session.overrideRoom ?? data.next.session.room,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                </Body>
+              </View>
+            </Row>
           </Card>
         ) : null}
 
         {data.hasCourses ? (
-          <Row style={{ marginTop: 8, flexWrap: 'wrap' }}>
-            <View style={{ flex: 1, minWidth: 150 }}>
-              <Button label="Paste an email" kind="secondary" onPress={() => router.push('/email')} />
-            </View>
-            <View style={{ flex: 1, minWidth: 150 }}>
-              <Button label="Import more" kind="secondary" onPress={() => router.push('/import')} />
-            </View>
+          <Row style={{ marginTop: 4, justifyContent: 'center', gap: 24 }}>
+            <TextLink label="Paste an email" icon="mail-outline" onPress={() => router.push('/email')} />
+            <TextLink label="Import more" icon="download-outline" onPress={() => router.push('/import')} />
           </Row>
         ) : null}
 
-        <Text style={{ color: c.textSecondary, fontSize: 12, textAlign: 'center', marginTop: 16 }}>
+        <Text
+          style={{
+            color: c.textSecondary,
+            fontSize: 12.5,
+            fontFamily: FONT.regular,
+            textAlign: 'center',
+            marginTop: 18,
+          }}>
           {data.todayCount > 0
             ? `${data.todayCount} class${data.todayCount === 1 ? '' : 'es'} left today`
             : 'No more classes today'}
@@ -282,104 +317,164 @@ function FocusCard({
   const leave = start ? leaveAt(start, walk, course) : null;
   const msUntilStart = start ? start.getTime() - now.getTime() : 0;
   const msUntilLeave = leave ? leave.getTime() - now.getTime() : 0;
+  const leaveUrgent = !isCurrent && leave != null && msUntilLeave <= 0;
 
   const openDirections = () => {
     Linking.openURL(bestMapUrl(loc, building || course.code, Platform.OS === 'ios'));
   };
 
-  const importanceTone =
-    importance?.level === 'critical'
-      ? 'danger'
-      : importance?.level === 'high'
-        ? 'warning'
-        : importance?.level === 'unknown'
-          ? 'neutral'
-          : 'success';
+  const walkSourceNote =
+    walk.source === 'override'
+      ? 'your override'
+      : walk.source === 'recorded'
+        ? `avg of ${walk.sampleCount} timed walk${walk.sampleCount === 1 ? '' : 's'}`
+        : walk.source === 'default'
+          ? 'estimate'
+          : 'by distance';
 
   return (
-    <Card style={{ borderLeftWidth: 4, borderLeftColor: course.color ?? c.accent }}>
-      <Row style={{ justifyContent: 'space-between' }}>
-        <Badge label={isCurrent ? 'HAPPENING NOW' : 'NEXT CLASS'} tone={isCurrent ? 'danger' : 'accent'} />
-        {session.status === 'moved' ? <Badge label="MOVED" tone="warning" /> : null}
-      </Row>
-      <Title>
-        {course.code} · {course.name}
-      </Title>
-      <Body secondary>
-        {formatDateHuman(session.date)} · {formatTime12(session.startTime)}–{formatTime12(session.endTime)}
-        {course.professor ? ` · ${course.professor}` : ''}
-      </Body>
-      <View style={{ marginVertical: 10 }}>
-        <Text style={{ fontSize: 34, fontWeight: '800', color: c.text }}>
-          {isCurrent ? 'In progress' : `in ${formatCountdown(msUntilStart)}`}
+    <Card style={{ paddingVertical: 18 }}>
+      <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+        <Row style={{ gap: 8 }}>
+          {isCurrent ? <LiveDot color={c.accent} /> : null}
+          <Badge label={isCurrent ? 'In session' : 'Up next'} tone={isCurrent ? 'accent' : 'neutral'} />
+          {session.status === 'moved' ? <Badge label="Moved" tone="warning" /> : null}
+        </Row>
+        <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary }}>
+          {MEETING_COMPONENT_LABEL[session.patternLabel]}
         </Text>
-        <Body>
-          📍 {building || 'Building not set'} {room}
-          {loc?.entranceNotes ? `\n➤ ${loc.entranceNotes}` : ''}
-        </Body>
-        {session.changeNote ? <Body secondary>Note: {session.changeNote}</Body> : null}
-      </View>
+      </Row>
 
-      {!isCurrent && leave ? (
-        <View
-          style={{
-            backgroundColor: msUntilLeave <= 0 ? c.danger + '18' : c.subtle,
-            borderRadius: 10,
-            padding: 10,
-            marginBottom: 10,
-          }}>
-          <Body>
-            🚶 ~{walk.minutes} min walk
-            {walk.source === 'override'
-              ? ' (your override)'
-              : walk.source === 'recorded'
-                ? ` (from ${walk.sampleCount} timed walk${walk.sampleCount === 1 ? '' : 's'})`
-                : walk.source === 'default'
-                  ? ' (rough default — set your start point in Settings)'
-                  : ''}
-          </Body>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: msUntilLeave <= 0 ? c.danger : c.text }}>
-            {msUntilLeave <= 0
-              ? 'Leave now!'
-              : `Leave by ${leave.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} (${formatCountdown(msUntilLeave)})`}
+      <Text style={{ fontFamily: FONT.black, fontSize: 24, color: c.text, letterSpacing: 0.2 }}>
+        {course.code}
+      </Text>
+      <Body secondary style={{ marginBottom: 12 }}>
+        {course.name}
+      </Body>
+
+      <IconRow icon="time-outline">
+        {formatDateHuman(session.date)} · {formatTime12(session.startTime)}–{formatTime12(session.endTime)}
+      </IconRow>
+      <IconRow icon="location-outline">
+        {building ? `${building} ${room}`.trim() : 'Location not set'}
+        {loc?.entranceNotes ? (
+          <Text style={{ color: c.textSecondary, fontSize: 13.5 }}>
+            {'\n'}
+            {loc.entranceNotes}
           </Text>
-          <WalkTimerWidget toBuilding={building} onSaved={onWalkTimed} />
-        </View>
+        ) : null}
+      </IconRow>
+      {course.professor ? <IconRow icon="person-outline">{course.professor}</IconRow> : null}
+      {session.changeNote ? (
+        <IconRow icon="information-circle-outline" color={c.warning}>
+          {session.changeNote}
+        </IconRow>
       ) : null}
 
+      <Divider />
+
+      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <View>
+          <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary, marginBottom: 2 }}>
+            {isCurrent ? 'Status' : 'Starts in'}
+          </Text>
+          <Text
+            style={{
+              fontFamily: FONT.black,
+              fontSize: 30,
+              color: c.text,
+              fontVariant: ['tabular-nums'],
+              lineHeight: 34,
+            }}>
+            {isCurrent ? 'In progress' : formatCountdown(msUntilStart)}
+          </Text>
+        </View>
+        {!isCurrent && leave ? (
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary, marginBottom: 2 }}>
+              {walk.minutes} min walk · {walkSourceNote}
+            </Text>
+            <Text
+              style={{
+                fontFamily: FONT.bold,
+                fontSize: 16,
+                color: leaveUrgent ? c.danger : c.text,
+              }}>
+              {leaveUrgent
+                ? 'Leave now'
+                : `Leave by ${leave.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}
+            </Text>
+          </View>
+        ) : null}
+      </Row>
+
+      {!isCurrent ? <WalkTimerWidget toBuilding={building} onSaved={onWalkTimed} /> : null}
+
       {importance ? (
-        <View style={{ marginBottom: 10 }}>
-          <Row>
-            <Badge label={IMPORTANCE_LABEL[importance.level]} tone={importanceTone} />
-          </Row>
+        <>
+          <Divider />
+          <IconRow
+            icon={
+              importance.level === 'critical' || importance.level === 'high'
+                ? 'flame-outline'
+                : importance.level === 'unknown'
+                  ? 'help-circle-outline'
+                  : 'pulse-outline'
+            }
+            color={
+              importance.level === 'critical'
+                ? c.danger
+                : importance.level === 'high'
+                  ? c.warning
+                  : undefined
+            }>
+            {IMPORTANCE_LABEL[importance.level]}
+          </IconRow>
           {importance.reasons.slice(0, 3).map((r, i) => (
-            <Body key={i} secondary style={{ fontSize: 13 }}>
-              • {r}
+            <Body key={i} secondary style={{ fontSize: 13, marginLeft: 24, lineHeight: 19 }}>
+              {r}
               {importance.citations[i]
                 ? `  (${importance.citations[i].sourceFilename}${importance.citations[i].page ? `, p.${importance.citations[i].page}` : ''})`
                 : ''}
             </Body>
           ))}
-        </View>
+        </>
       ) : null}
 
-      <Row>
-        <View style={{ flex: 1 }}>
-          <Button label="Directions" kind="secondary" onPress={openDirections} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Button label="Notes" kind="secondary" onPress={() => router.push(`/session/${session.id}`)} />
-        </View>
+      <Divider />
+
+      <Row style={{ justifyContent: 'space-around', marginBottom: 6 }}>
+        <TextLink label="Directions" icon="navigate-outline" onPress={openDirections} />
+        <TextLink label="Notes" icon="create-outline" onPress={() => router.push(`/session/${session.id}`)} />
       </Row>
       <Row>
         <View style={{ flex: 1 }}>
-          <Button label="✓ Attended" onPress={onAttended} />
+          <Button label="Mark attended" icon="checkmark" onPress={onAttended} />
         </View>
         <View style={{ flex: 1 }}>
-          <Button label="Can't make it" kind="ghost" onPress={onAbsent} />
+          <Button label="Can't make it" kind="secondary" onPress={onAbsent} />
         </View>
       </Row>
     </Card>
+  );
+}
+
+/** Small pulsing dot marking a class that's happening right now. */
+function LiveDot({ color }: { color: string }) {
+  const [pulse] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: 800, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
+  return (
+    <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, opacity }} />
   );
 }
 
@@ -440,21 +535,25 @@ function WalkTimerWidget({ toBuilding, onSaved }: { toBuilding: string; onSaved:
   };
 
   if (stage === 'closed') {
-    return <Button label="⏱ Time this walk" kind="ghost" compact onPress={() => setStage('picking')} />;
+    return (
+      <View style={{ alignItems: 'flex-end', marginTop: 2 }}>
+        <TextLink label="Time this walk" icon="stopwatch-outline" onPress={() => setStage('picking')} />
+      </View>
+    );
   }
 
   if (stage === 'saved') {
     return (
-      <View>
-        <Badge label={`Saved: ${Math.max(1, Math.round(elapsed / 60))} min`} tone="success" />
-        <Button label="Done" kind="ghost" compact onPress={reset} />
-      </View>
+      <Row style={{ justifyContent: 'flex-end', marginTop: 6 }}>
+        <Badge label={`Saved · ${Math.max(1, Math.round(elapsed / 60))} min`} tone="success" />
+        <TextLink label="Done" onPress={reset} />
+      </Row>
     );
   }
 
   if (stage === 'picking') {
     return (
-      <View style={{ marginTop: 8 }}>
+      <View style={{ marginTop: 10 }}>
         <Body secondary style={{ fontSize: 13, marginBottom: 6 }}>
           Where are you walking from?
         </Body>
@@ -473,14 +572,14 @@ function WalkTimerWidget({ toBuilding, onSaved }: { toBuilding: string; onSaved:
             </View>
           ))}
         </Row>
-        <Button label="Cancel" kind="ghost" compact onPress={reset} />
+        <TextLink label="Cancel" onPress={reset} />
       </View>
     );
   }
 
   if (stage === 'ready' && from) {
     return (
-      <View style={{ marginTop: 8 }}>
+      <View style={{ marginTop: 10 }}>
         {from === 'other' ? (
           <Field
             label="Describe this location"
@@ -493,17 +592,25 @@ function WalkTimerWidget({ toBuilding, onSaved }: { toBuilding: string; onSaved:
             Starting from: {WALK_START_POINT_LABEL[from]}
           </Body>
         )}
-        <Button label="Start timer" onPress={start} />
-        <Button label="Back" kind="ghost" compact onPress={() => setStage('picking')} />
+        <Button label="Start timer" icon="play" onPress={start} />
+        <TextLink label="Back" onPress={() => setStage('picking')} />
       </View>
     );
   }
 
   // stage === 'running'
   return (
-    <View style={{ marginTop: 8, alignItems: 'center' }}>
-      <Text style={{ fontSize: 28, fontWeight: '800', color: c.text }}>{formatElapsed(elapsed)}</Text>
-      <Button label="Stop & save" onPress={stopAndSave} />
+    <View style={{ marginTop: 10, alignItems: 'center' }}>
+      <Text
+        style={{
+          fontSize: 32,
+          fontFamily: FONT.black,
+          color: c.text,
+          fontVariant: ['tabular-nums'],
+        }}>
+        {formatElapsed(elapsed)}
+      </Text>
+      <Button label="Stop & save" icon="stop" onPress={stopAndSave} />
     </View>
   );
 }

@@ -3,6 +3,7 @@
  * minimum-viable vs deeper checklist, quiz, editable notes.
  */
 
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -14,6 +15,8 @@ import {
   Card,
   ErrorBox,
   Field,
+  FONT,
+  IconRow,
   Loading,
   Row,
   Screen,
@@ -92,9 +95,12 @@ export default function PlanScreen() {
   };
 
   const check = (done: boolean) => (
-    <Text style={{ fontSize: 18, marginRight: 8, color: done ? c.success : c.textSecondary }}>
-      {done ? '☑' : '☐'}
-    </Text>
+    <Ionicons
+      name={done ? 'checkbox' : 'square-outline'}
+      size={19}
+      style={{ marginRight: 8, marginTop: 1 }}
+      color={done ? c.success : c.textSecondary}
+    />
   );
 
   return (
@@ -136,7 +142,7 @@ export default function PlanScreen() {
         ) : (
           <Card>
             <Subtitle>Likely missed topic</Subtitle>
-            <Body style={{ fontSize: 18, fontWeight: '700' }}>{plan.likelyTopic ?? 'Unknown'}</Body>
+            <Body style={{ fontSize: 18, fontFamily: FONT.bold }}>{plan.likelyTopic ?? 'Unknown'}</Body>
             {plan.estimatedMinutes ? <Body secondary>Estimated time: ~{plan.estimatedMinutes} min</Body> : null}
             {plan.prerequisites.length > 0 ? (
               <Body secondary>Builds on: {plan.prerequisites.join('; ')}</Body>
@@ -145,7 +151,7 @@ export default function PlanScreen() {
         )}
 
         {plan.minimumViable.length > 0 ? (
-          <Card style={{ borderLeftWidth: 4, borderLeftColor: c.gold }}>
+          <Card>
             <Subtitle>Minimum viable catch-up</Subtitle>
             {tasks.length > 0
               ? tasks.map((t) => (
@@ -200,10 +206,10 @@ export default function PlanScreen() {
           <Card>
             <Subtitle>Relevant files</Subtitle>
             {plan.relevantFiles.map((f, i) => (
-              <Body key={i} secondary>
-                📄 {f.sourceFilename}
+              <IconRow key={i} icon="document-text-outline">
+                {f.sourceFilename}
                 {f.page ? ` — page ${f.page}` : ''}
-              </Body>
+              </IconRow>
             ))}
           </Card>
         ) : null}
@@ -222,7 +228,7 @@ export default function PlanScreen() {
             <Subtitle>Check yourself</Subtitle>
             {plan.quiz.map((q, i) => (
               <View key={i} style={{ marginBottom: 12 }}>
-                <Body style={{ fontWeight: '600' }}>
+                <Body style={{ fontFamily: FONT.bold }}>
                   {i + 1}. {q.question}
                 </Body>
                 {q.options.map((opt, oi) => (

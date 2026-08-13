@@ -18,6 +18,7 @@ import {
   Screen,
   Subtitle,
   useColors,
+  FONT,
 } from '@/components/ui';
 import {
   absencesRepo,
@@ -246,7 +247,7 @@ export default function ImportScreen() {
             <Subtitle>Preview — {drafts.length} course(s) found</Subtitle>
             {drafts.map((d, i) => (
               <Card key={i} style={{ paddingVertical: 12 }}>
-                <Body style={{ fontWeight: '700' }}>
+                <Body style={{ fontFamily: FONT.bold }}>
                   {d.code || '(no code)'} · {d.name}
                 </Body>
                 {d.patterns.map((p, pi) => (

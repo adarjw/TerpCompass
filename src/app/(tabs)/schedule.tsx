@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   EmptyState,
+  FONT,
   Loading,
   Row,
   Screen,
@@ -79,13 +80,23 @@ export default function ScheduleScreen() {
                   const course = byId.get(s.courseId);
                   if (!course) return null;
                   return (
-                    <Card key={s.id} style={{ borderLeftWidth: 4, borderLeftColor: course.color ?? c.accent, paddingVertical: 12 }}>
+                    <Card key={s.id} style={{ paddingVertical: 12 }}>
                       <Pressable onPress={() => router.push(`/course/${course.id}`)}>
                         <Row style={{ justifyContent: 'space-between' }}>
-                          <Body style={{ fontWeight: '700' }}>
-                            {formatTime12(s.startTime)} {course.code}
-                          </Body>
-                          <Badge label={s.status.toUpperCase()} tone={STATUS_TONE[s.status] ?? 'neutral'} />
+                          <Row style={{ gap: 8 }}>
+                            <View
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: 4,
+                                backgroundColor: course.color ?? c.accent,
+                              }}
+                            />
+                            <Body style={{ fontFamily: FONT.bold }}>
+                              {formatTime12(s.startTime)} {course.code}
+                            </Body>
+                          </Row>
+                          <Badge label={s.status} tone={STATUS_TONE[s.status] ?? 'neutral'} />
                         </Row>
                         <Body secondary>
                           {MEETING_COMPONENT_LABEL[s.patternLabel]} ·{' '}
@@ -124,7 +135,7 @@ export default function ScheduleScreen() {
             <Card style={{ paddingVertical: 12 }}>
               <Row style={{ justifyContent: 'space-between' }}>
                 <View style={{ flex: 1 }}>
-                  <Body style={{ fontWeight: '700' }}>
+                  <Body style={{ fontFamily: FONT.bold }}>
                     {course.code} · {course.name}
                   </Body>
                   {(patternsByCourse.get(course.id) ?? []).map((p) => (

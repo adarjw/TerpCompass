@@ -12,11 +12,12 @@ import {
   Body,
   Card,
   EmptyState,
+  FONT,
+  Icon,
   Loading,
   Row,
   Screen,
   Subtitle,
-  useColors,
 } from '@/components/ui';
 import {
   absencesRepo,
@@ -40,7 +41,6 @@ interface DashData {
 
 export default function DashboardScreen() {
   const { db, version } = useApp();
-  const c = useColors();
   const [data, setData] = useState<DashData | null>(null);
 
   useFocusEffect(
@@ -114,11 +114,14 @@ export default function DashboardScreen() {
               const course = byId.get(p.courseId);
               return (
                 <Pressable key={p.id} onPress={() => router.push(`/plan/${p.id}`)}>
-                  <Card style={{ borderLeftWidth: 4, borderLeftColor: c.gold }}>
+                  <Card>
                     <Row style={{ justifyContent: 'space-between' }}>
-                      <Body style={{ fontWeight: '700' }}>{course?.code ?? '?'}</Body>
+                      <Row style={{ gap: 8 }}>
+                        <Icon name="book-outline" size={17} />
+                        <Body style={{ fontFamily: FONT.bold }}>{course?.code ?? '?'}</Body>
+                      </Row>
                       <Badge
-                        label={p.confidence === 'none' ? 'TOPIC UNKNOWN' : (p.likelyTopic ?? 'Plan')}
+                        label={p.confidence === 'none' ? 'Topic unknown' : (p.likelyTopic ?? 'Plan')}
                         tone={p.confidence === 'none' ? 'warning' : 'accent'}
                       />
                     </Row>
@@ -177,10 +180,10 @@ export default function DashboardScreen() {
               <Card key={e.id} style={{ paddingVertical: 12 }}>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <View style={{ flex: 1 }}>
-                    <Body style={{ fontWeight: '600' }}>{e.title}</Body>
+                    <Body style={{ fontFamily: FONT.bold }}>{e.title}</Body>
                     <Body secondary>{formatDateHuman(e.date)}</Body>
                   </View>
-                  <Badge label={e.kind.toUpperCase()} tone={e.kind === 'exam' ? 'danger' : 'warning'} />
+                  <Badge label={e.kind} tone={e.kind === 'exam' ? 'danger' : 'warning'} />
                 </Row>
               </Card>
             ))}

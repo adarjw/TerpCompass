@@ -17,6 +17,7 @@ import {
   Screen,
   Subtitle,
   Title,
+  FONT,
 } from '@/components/ui';
 import {
   absencesRepo,
@@ -157,7 +158,7 @@ export default function CourseScreen() {
             return (
               <Row key={p.id} style={{ justifyContent: 'space-between', marginTop: 6 }}>
                 <View style={{ flex: 1 }}>
-                  <Body style={{ fontWeight: '600' }}>{MEETING_COMPONENT_LABEL[p.label]}</Body>
+                  <Body style={{ fontFamily: FONT.bold }}>{MEETING_COMPONENT_LABEL[p.label]}</Body>
                   <Body secondary>
                     {p.meetingDays.map((d) => WEEKDAY_SHORT[d]).join('')} · {formatTime12(p.startTime)}–
                     {formatTime12(p.endTime)} · {where || 'Location not set'}
@@ -219,7 +220,7 @@ export default function CourseScreen() {
             <Card key={res.id} style={{ paddingVertical: 12 }}>
               <Row style={{ justifyContent: 'space-between' }}>
                 <View style={{ flex: 1 }}>
-                  <Body style={{ fontWeight: '600' }}>{res.title}</Body>
+                  <Body style={{ fontFamily: FONT.bold }}>{res.title}</Body>
                   <Row style={{ marginTop: 4 }}>
                     <Badge label={res.kind.replace('_', ' ')} />
                     {res.extractionStatus === 'ok' ? (
@@ -236,7 +237,7 @@ export default function CourseScreen() {
                     </Body>
                   ) : null}
                 </View>
-                <Button label="✕" kind="ghost" compact onPress={() => removeResource(res)} />
+                <Button label="Remove" icon="trash-outline" kind="ghost" compact onPress={() => removeResource(res)} />
               </Row>
             </Card>
           ))

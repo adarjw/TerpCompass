@@ -40,7 +40,8 @@
           "icon": "./assets/images/icon.png",
           "color": "#E21833"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -13,6 +13,7 @@ import {
   Row,
   Screen,
   Subtitle,
+  FONT,
 } from '@/components/ui';
 import { locationsRepo } from '@/db/repo';
 import { makeId } from '@/lib/ids';
@@ -169,7 +170,7 @@ export default function BuildingsScreen() {
             <Card key={loc.id} style={{ paddingVertical: 12 }}>
               <Row style={{ justifyContent: 'space-between' }}>
                 <View style={{ flex: 1 }}>
-                  <Body style={{ fontWeight: '600' }}>
+                  <Body style={{ fontFamily: FONT.bold }}>
                     {loc.name} {loc.abbreviation ? `(${loc.abbreviation})` : ''}
                   </Body>
                   {loc.entranceNotes ? <Body secondary>{loc.entranceNotes}</Body> : null}
@@ -189,7 +190,7 @@ export default function BuildingsScreen() {
                     onPress={() => Linking.openURL(bestMapUrl(loc, loc.name, Platform.OS === 'ios'))}
                   />
                   <Button label="Edit" kind="secondary" compact onPress={() => startEdit(loc)} />
-                  <Button label="✕" kind="ghost" compact onPress={() => remove(loc.id)} />
+                  <Button label="Remove" icon="trash-outline" kind="ghost" compact onPress={() => remove(loc.id)} />
                 </Row>
               </Row>
             </Card>
