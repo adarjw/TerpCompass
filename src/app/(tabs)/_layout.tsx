@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs, router } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, type ColorValue } from 'react-native';
+import { Platform, Pressable, Text, type ColorValue } from 'react-native';
 
 import { FONT, Palette } from '@/components/ui';
 import { useApp } from '@/state/AppContext';
@@ -55,11 +55,15 @@ export default function TabsLayout() {
               onPress={() => router.push('/features')}
               hitSlop={8}
               style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
                 paddingHorizontal: 16,
                 paddingVertical: 10,
                 opacity: pressed ? 0.5 : 1,
               })}>
-              <Ionicons name="sparkles-outline" size={21} color={c.accent} />
+              <Ionicons name="sparkles-outline" size={19} color={c.accent} />
+              <Text style={{ fontFamily: FONT.bold, fontSize: 14, color: c.accent }}>Features</Text>
             </Pressable>
           ),
         }}
