@@ -21,6 +21,7 @@ import {
   Card,
   courseColor,
   EmptyState,
+  FAB,
   FONT,
   Icon,
   Loading,
@@ -77,6 +78,7 @@ export default function ScheduleScreen() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [confirmWipe, setConfirmWipe] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
 
   const startOver = async () => {
     await wipeScheduleData();
@@ -221,12 +223,12 @@ export default function ScheduleScreen() {
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 }}>
         {daySessions.length === 0 ? (
           <EmptyState
             icon="cafe-outline"
             title={`Nothing on ${monthDayLabel(selectedDate)}`}
-            hint="No classes scheduled this day. Pick another day above, or add a class below."
+            hint="No classes scheduled this day. Pick another day above, or add one with the + button."
           />
         ) : (
           daySessions.map((s, idx) => {
@@ -403,9 +405,7 @@ export default function ScheduleScreen() {
             </Pressable>
           ))
         )}
-        <Button label="Add class" icon="add" onPress={() => router.push('/course-edit')} />
-        <Row style={{ justifyContent: 'center', gap: 20, marginTop: 4 }}>
-          <TextLink label="Import" icon="download-outline" onPress={() => router.push('/import')} />
+        <Row style={{ justifyContent: 'center', marginTop: 4 }}>
           <TextLink label="Buildings" icon="business-outline" onPress={() => router.push('/buildings')} />
         </Row>
         {courses.length > 0 ? (
@@ -442,6 +442,54 @@ export default function ScheduleScreen() {
           </>
         ) : null}
       </ScrollView>
+
+      {/* One floating action for adding to the schedule. */}
+      {fabOpen ? (
+        <View
+          style={{
+            position: 'absolute',
+            right: 16,
+            bottom: 86,
+            backgroundColor: c.elevated,
+            borderRadius: 12,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: c.border,
+            paddingVertical: 4,
+            minWidth: 200,
+            shadowColor: '#000',
+            shadowOpacity: 0.25,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: 8,
+          }}>
+          {(
+            [
+              { label: 'Scan or import schedule', icon: 'scan-outline', to: '/import' },
+              { label: 'Add class manually', icon: 'create-outline', to: '/course-edit' },
+            ] as const
+          ).map((item) => (
+            <Pressable
+              key={item.to}
+              accessibilityRole="button"
+              onPress={() => {
+                setFabOpen(false);
+                router.push(item.to);
+              }}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                backgroundColor: pressed ? c.subtle : 'transparent',
+              })}>
+              <Icon name={item.icon} size={17} color={c.accent} />
+              <Body style={{ fontSize: 14.5 }}>{item.label}</Body>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+      <FAB icon={fabOpen ? 'close' : 'add'} label="Add to schedule" onPress={() => setFabOpen(!fabOpen)} />
     </Screen>
   );
 }

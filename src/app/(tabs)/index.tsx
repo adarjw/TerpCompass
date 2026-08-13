@@ -38,8 +38,8 @@ import { loadDemoData } from '@/db/seed';
 import { findBuilding } from '@/lib/campus';
 import { makeId } from '@/lib/ids';
 import { IMPORTANCE_LABEL, scoreSessionImportance } from '@/lib/importance';
-import { whereShouldIBe, sessionEnd, sessionStart, type SessionWithCourse } from '@/lib/sessions';
-import { formatCountdown, formatDateHuman, formatTime12 } from '@/lib/time';
+import { sessionEnd, sessionsOn, sessionStart, whereShouldIBe, type SessionWithCourse } from '@/lib/sessions';
+import { formatCountdown, formatDateHuman, formatTime12, toISODate } from '@/lib/time';
 import type { CampusLocation, SessionImportance, WalkRecording, WalkStartPoint } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WALK_START_POINT_LABEL } from '@/lib/types';
 import { bestMapUrl, estimateWalkWithRecordings, leaveAt, type WalkEstimate } from '@/lib/walking';
@@ -49,6 +49,8 @@ interface HomeData {
   current: SessionWithCourse | null;
   next: SessionWithCourse | null;
   todayCount: number;
+  /** Total classes scheduled today, remaining or not. */
+  todayTotal: number;
   buildings: CampusLocation[];
   importanceBySession: Record<string, SessionImportance>;
   hasCourses: boolean;
@@ -131,6 +133,7 @@ export default function HomeScreen() {
         current: info.current,
         next: info.next,
         todayCount: info.todayRemaining.length,
+        todayTotal: sessionsOn(sessions, toISODate(nowDate)).length,
         walkRecordings,
         impliedFromLabel,
         buildings,
@@ -181,12 +184,22 @@ export default function HomeScreen() {
             fontFamily: FONT.regular,
             fontSize: 13,
             color: c.textSecondary,
-            marginBottom: 10,
             textTransform: 'uppercase',
             letterSpacing: 0.6,
           }}>
           {todayLabel}
         </Text>
+        {data.hasCourses ? (
+          <Text style={{ fontFamily: FONT.regular, fontSize: 13.5, color: c.textSecondary, marginTop: 3, marginBottom: 10 }}>
+            {data.todayCount > 0
+              ? `${data.todayCount} class${data.todayCount === 1 ? '' : 'es'} left today`
+              : data.todayTotal > 0
+                ? 'No more classes today'
+                : 'No classes today'}
+          </Text>
+        ) : (
+          <View style={{ height: 10 }} />
+        )}
         {error ? <ErrorBox message={error} /> : null}
 
         {!data.hasCourses ? (
@@ -263,24 +276,42 @@ export default function HomeScreen() {
         ) : null}
 
         {data.hasCourses ? (
-          <Row style={{ marginTop: 4, justifyContent: 'center', gap: 24 }}>
-            <TextLink label="Paste an email" icon="mail-outline" onPress={() => router.push('/email')} />
-            <TextLink label="Import more" icon="download-outline" onPress={() => router.push('/import')} />
-          </Row>
+          <Card style={{ paddingVertical: 4, paddingHorizontal: 4, flexDirection: 'row' }}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/email')}
+              style={({ pressed }) => ({
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 10,
+                borderRadius: 8,
+                backgroundColor: pressed ? c.subtle : 'transparent',
+              })}>
+              <Icon name="mail-outline" size={16} color={c.accent} />
+              <Text style={{ fontFamily: FONT.bold, fontSize: 13.5, color: c.text }}>Paste an email</Text>
+            </Pressable>
+            <View style={{ width: 1, backgroundColor: c.hairline, marginVertical: 6 }} />
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/import')}
+              style={({ pressed }) => ({
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 10,
+                borderRadius: 8,
+                backgroundColor: pressed ? c.subtle : 'transparent',
+              })}>
+              <Icon name="download-outline" size={16} color={c.accent} />
+              <Text style={{ fontFamily: FONT.bold, fontSize: 13.5, color: c.text }}>Import more</Text>
+            </Pressable>
+          </Card>
         ) : null}
-
-        <Text
-          style={{
-            color: c.textSecondary,
-            fontSize: 12.5,
-            fontFamily: FONT.regular,
-            textAlign: 'center',
-            marginTop: 18,
-          }}>
-          {data.todayCount > 0
-            ? `${data.todayCount} class${data.todayCount === 1 ? '' : 'es'} left today`
-            : 'No more classes today'}
-        </Text>
       </ScrollView>
     </Screen>
   );
@@ -345,7 +376,7 @@ function FocusCard({
   if (isCurrent) {
     urgency = { text: `Ends ${formatTime12(session.endTime)}`, color: c.textSecondary, bold: false };
   } else if (msUntilStart > 24 * 3600 * 1000) {
-    urgency = { text: `${daysAway} days away`, color: c.textSecondary, bold: false };
+    urgency = { text: `In ${daysAway} day${daysAway === 1 ? '' : 's'}`, color: c.textSecondary, bold: false };
   } else if (leave && minsUntilLeave <= 0) {
     urgency = { text: 'Leave now', color: c.accent, bold: true };
   } else if (leave && minsUntilLeave <= 15) {
@@ -378,7 +409,7 @@ function FocusCard({
             textTransform: 'uppercase',
             letterSpacing: 0.8,
           }}>
-          {isCurrent ? 'In session' : 'Next class'}
+          {isCurrent ? 'In session' : session.date === toISODate(now) ? 'Next class' : 'Next upcoming class'}
         </Text>
         <Text
           style={{
@@ -390,14 +421,15 @@ function FocusCard({
         </Text>
       </Row>
 
-      <Card>
+      {/* Slim gold rail marks the focused course — same mark the timeline dots echo. */}
+      <Card style={{ borderLeftWidth: 3, borderLeftColor: c.gold }}>
         <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.accent, letterSpacing: 0.2 }}>
           {course.code}
         </Text>
-        <Body style={{ fontFamily: FONT.bold, marginBottom: 6 }}>{course.name}</Body>
-        {/* UMD gold accent rule — small, deliberate brand mark. */}
-        <View style={{ width: 34, height: 3, borderRadius: 2, backgroundColor: c.gold, marginBottom: 10 }} />
-        <Row style={{ marginBottom: 10, gap: 6 }}>
+        {course.name && course.name.trim() !== course.code ? (
+          <Body style={{ fontFamily: FONT.bold }}>{course.name}</Body>
+        ) : null}
+        <Row style={{ marginTop: 6, marginBottom: 10, gap: 6 }}>
           {isCurrent ? <LiveDot color={c.accent} /> : null}
           <Badge label={MEETING_COMPONENT_LABEL[session.patternLabel]} tone="accent" />
           {session.status === 'moved' ? <Badge label="Moved" tone="warning" /> : null}
@@ -455,12 +487,12 @@ function FocusCard({
             {!timerOpen ? (
               <Row>
                 <View style={{ flex: 1 }}>
-                  <Button label="Directions" kind="tonal" icon="navigate-outline" onPress={openDirections} />
+                  <Button label="Directions" icon="navigate-outline" onPress={openDirections} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Button
                     label="Time route"
-                    kind="tonal"
+                    kind="secondary"
                     icon="stopwatch-outline"
                     onPress={() => setTimerOpen(true)}
                   />
@@ -478,11 +510,11 @@ function FocusCard({
 
         {!hasSyllabus ? (
           <>
-            <Divider style={{ marginVertical: 10 }} />
-            <Row style={{ justifyContent: 'space-between' }}>
+            <Divider style={{ marginVertical: 8 }} />
+            <Row style={{ justifyContent: 'space-between', minHeight: 30 }}>
               <Row style={{ gap: 8, flex: 1 }}>
-                <Icon name="book-outline" size={16} />
-                <Body secondary style={{ fontSize: 13.5 }}>
+                <Icon name="book-outline" size={15} />
+                <Body secondary style={{ fontSize: 13 }}>
                   No syllabus linked
                 </Body>
               </Row>
@@ -529,26 +561,17 @@ function FocusCard({
 
         {isCurrent ? (
           <Row>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1.4 }}>
               <Button label="Mark attended" icon="checkmark" onPress={onAttended} />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Can't make it" kind="secondary" onPress={onAbsent} />
+              <Button label="Can't make it" kind="danger-outline" onPress={onAbsent} />
             </View>
           </Row>
         ) : (
-          <Row>
-            <View style={{ flex: 1 }}>
-              <Button
-                label="Notes"
-                kind="tonal"
-                icon="create-outline"
-                onPress={() => router.push(`/session/${session.id}`)}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button label="Mark absent" kind="secondary" onPress={onAbsent} />
-            </View>
+          <Row style={{ justifyContent: 'space-between' }}>
+            <TextLink label="Notes" icon="create-outline" onPress={() => router.push(`/session/${session.id}`)} />
+            <Button label="Mark absent" kind="danger-outline" compact onPress={onAbsent} />
           </Row>
         )}
       </Card>

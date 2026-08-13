@@ -20,6 +20,7 @@ import {
   Easing,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -41,6 +42,8 @@ export interface ThemeColors {
   textSecondary: string;
   background: string;
   card: string;
+  /** Raised surfaces: menus, chips, rows inside grouped cards. */
+  elevated: string;
   border: string;
   hairline: string;
   accent: string;
@@ -60,12 +63,13 @@ export const Palette: { light: ThemeColors; dark: ThemeColors } = {
     textSecondary: '#5B6770',
     background: '#F6F7F8',
     card: '#FFFFFF',
+    elevated: '#FFFFFF',
     border: '#E3E6E8',
     hairline: '#ECEEF0',
-    accent: '#E21833', // UMD red
-    accentPressed: '#C11228',
+    accent: '#E03A55', // coral, darkened for white backgrounds
+    accentPressed: '#C82F48',
     accentText: '#FFFFFF',
-    gold: '#FFD200',
+    gold: '#F7C928',
     success: '#2D7D46',
     warning: '#9A6700',
     danger: '#B3001B',
@@ -73,21 +77,22 @@ export const Palette: { light: ThemeColors; dark: ThemeColors } = {
     inputBorder: '#C7CDD1',
   },
   dark: {
-    text: '#E8ECEF',
-    textSecondary: '#A2AEB8',
-    background: '#101418',
-    card: '#191F24',
-    border: '#2A3238',
-    hairline: '#232B31',
-    accent: '#FF5063',
-    accentPressed: '#E93F53',
+    text: '#F3F5F7',
+    textSecondary: '#A7B1BC',
+    background: '#0C1115',
+    card: '#171E24',
+    elevated: '#1C252C',
+    border: '#303A42',
+    hairline: '#28323A',
+    accent: '#FF4F6A', // coral
+    accentPressed: '#E8455F',
     accentText: '#14181C',
-    gold: '#FFD200',
+    gold: '#F7C928',
     success: '#5CB878',
     warning: '#DCA54C',
-    danger: '#F2707E',
-    subtle: '#222A30',
-    inputBorder: '#3A444C',
+    danger: '#FF6B7F',
+    subtle: '#222B33',
+    inputBorder: '#3C4854',
   },
 };
 
@@ -106,7 +111,6 @@ const COURSE_DOT_COLORS = [
   '#7A9E2C', // olive green
   '#8E5BB8', // purple
   '#C77B1E', // amber
-  '#1F9E89', // teal
   '#C2527E', // rose
   '#5B6FD6', // indigo
   '#946B4A', // brown
@@ -177,8 +181,8 @@ export function Card({ children, style }: { children: React.ReactNode; style?: S
       style={[
         {
           backgroundColor: c.card,
-          borderRadius: 8,
-          padding: 16,
+          borderRadius: 12,
+          padding: 14,
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: c.border,
           marginBottom: 12,
@@ -307,7 +311,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  kind?: 'primary' | 'secondary' | 'tonal' | 'danger' | 'ghost';
+  kind?: 'primary' | 'secondary' | 'tonal' | 'danger' | 'danger-outline' | 'ghost';
   disabled?: boolean;
   compact?: boolean;
   icon?: IconName;
@@ -326,6 +330,9 @@ export function Button({
     // Tinted brand button (iOS-style): colorful without shouting.
     tonal: { bg: c.accent + '14', bgPressed: c.accent + '26', fg: c.accent },
     danger: { bg: c.danger, bgPressed: c.danger, fg: '#FFFFFF' },
+    // Destructive but not shouting: outline treatment for "mark absent"-type
+    // actions that shouldn't carry the same weight as the primary CTA.
+    'danger-outline': { bg: 'transparent', bgPressed: c.danger + '14', fg: c.danger, border: c.danger + '88' },
     ghost: { bg: 'transparent', bgPressed: c.subtle, fg: c.accent },
   };
   const t = palette[kind];
@@ -400,6 +407,135 @@ export function Badge({
     <View style={{ backgroundColor: t.bg, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start' }}>
       <Text style={{ color: t.fg, fontSize: 12, fontFamily: FONT.bold }}>{display}</Text>
     </View>
+  );
+}
+
+/**
+ * Themed switch: coral track + white thumb when on, dark-gray track + gray
+ * thumb when off/disabled. Use everywhere instead of a raw RN Switch so all
+ * toggles read the same.
+ */
+export function AppSwitch({
+  value,
+  onValueChange,
+  disabled,
+}: {
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  const c = useColors();
+  return (
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      trackColor={{ false: c.inputBorder, true: c.accent }}
+      thumbColor={disabled ? c.textSecondary : '#FFFFFF'}
+      ios_backgroundColor={c.inputBorder}
+    />
+  );
+}
+
+/**
+ * iOS-style grouped settings card: rows separated by hairlines, no outer
+ * padding (rows carry their own). Pair with SettingRow.
+ */
+export function SettingsGroup({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
+  const c = useColors();
+  const rows = React.Children.toArray(children).filter(Boolean);
+  return (
+    <View
+      style={[
+        {
+          backgroundColor: c.card,
+          borderRadius: 12,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: c.border,
+          marginBottom: 12,
+          overflow: 'hidden',
+        },
+        style,
+      ]}>
+      {rows.map((row, i) => (
+        <View key={i}>
+          {i > 0 ? <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.hairline, marginLeft: 14 }} /> : null}
+          {row}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** One grouped-settings row: label (+optional helper) left, control right. */
+export function SettingRow({
+  label,
+  helper,
+  right,
+  indent,
+  onPress,
+  children,
+}: {
+  label: string;
+  helper?: string;
+  right?: React.ReactNode;
+  /** Visually nest under a master toggle. */
+  indent?: boolean;
+  onPress?: () => void;
+  /** Full-width content under the label (inputs etc.). */
+  children?: React.ReactNode;
+}) {
+  const c = useColors();
+  const inner = (
+    <View style={{ paddingVertical: 11, paddingHorizontal: 14, paddingLeft: indent ? 28 : 14, minHeight: 44, justifyContent: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 15, fontFamily: FONT.regular, color: c.text }}>{label}</Text>
+          {helper ? (
+            <Text style={{ fontSize: 12.5, fontFamily: FONT.regular, color: c.textSecondary, marginTop: 2, lineHeight: 17 }}>
+              {helper}
+            </Text>
+          ) : null}
+        </View>
+        {right}
+      </View>
+      {children}
+    </View>
+  );
+  if (!onPress) return inner;
+  return (
+    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => ({ backgroundColor: pressed ? c.subtle : 'transparent' })}>
+      {inner}
+    </Pressable>
+  );
+}
+
+/** 56px coral floating action button, anchored above the bottom-right nav. */
+export function FAB({ icon = 'add', label, onPress }: { icon?: IconName; label: string; onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        position: 'absolute',
+        right: 16,
+        bottom: 20,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: pressed ? c.accentPressed : c.accent,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOpacity: 0.28,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 3 },
+        elevation: 6,
+      })}>
+      <Ionicons name={icon} size={26} color="#FFFFFF" />
+    </Pressable>
   );
 }
 

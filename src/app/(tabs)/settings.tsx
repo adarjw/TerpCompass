@@ -2,9 +2,11 @@
 
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, ScrollView, Share, Switch, View } from 'react-native';
+import { ScrollView, Share, View } from 'react-native';
 
+import { TimeField } from '@/components/TimeField';
 import {
+  AppSwitch,
   Body,
   Button,
   Card,
@@ -13,8 +15,9 @@ import {
   Loading,
   Row,
   Screen,
+  SettingRow,
+  SettingsGroup,
   Subtitle,
-  useColors,
 } from '@/components/ui';
 import { wipeAllData } from '@/db/database';
 import {
@@ -29,8 +32,7 @@ import {
   tasksRepo,
 } from '@/db/repo';
 import { buildBackup } from '@/lib/backup';
-import { normalizeTime } from '@/lib/csv';
-import type { AppSettings } from '@/lib/types';
+import { DEFAULT_SETTINGS, type AppSettings } from '@/lib/types';
 import { deleteAllSandboxFiles, writeExportFile } from '@/services/files';
 import { useApp } from '@/state/AppContext';
 
@@ -45,16 +47,25 @@ export default function SettingsScreen() {
   return <SettingsForm />;
 }
 
+/** The reminder toggles the master notification switch controls. */
+const REMINDER_KEYS = [
+  'morningSummary',
+  'before45',
+  'before20',
+  'leaveNow',
+  'before10',
+  'catchUpReminders',
+] as const;
+
 function SettingsForm() {
   const { db, settings, saveSettings, bump, rescheduleNotifications } = useApp();
-  const c = useColors();
   const [error, setError] = useState<string | null>(null);
   const [walkSpeed, setWalkSpeed] = useState(String(settings.walkingSpeedMps));
-  const [summaryTime, setSummaryTime] = useState(settings.notifications.morningSummaryTime);
   const [homeLat, setHomeLat] = useState(settings.homeLat?.toString() ?? '');
   const [homeLon, setHomeLon] = useState(settings.homeLon?.toString() ?? '');
   const [cliPath, setCliPath] = useState(settings.aiCliPath);
   const [studentName, setStudentName] = useState(settings.studentName);
+  const [confirmWipe, setConfirmWipe] = useState(false);
 
   const update = async (patch: Partial<AppSettings>) => {
     try {
@@ -68,12 +79,15 @@ function SettingsForm() {
   const updateNotif = (key: keyof AppSettings['notifications'], value: boolean | string) =>
     update({ notifications: { ...settings.notifications, [key]: value } });
 
-  const toggle = (label: string, value: boolean, onChange: (v: boolean) => void) => (
-    <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-      <Body style={{ flex: 1 }}>{label}</Body>
-      <Switch value={value} onValueChange={onChange} trackColor={{ true: c.accent }} />
-    </Row>
-  );
+  // There's no stored master flag: the master switch reads as "any reminder
+  // on". Off turns every reminder off; on restores the defaults.
+  const masterOn = REMINDER_KEYS.some((k) => settings.notifications[k]);
+  const setMaster = (on: boolean) => {
+    const next = { ...settings.notifications };
+    for (const k of REMINDER_KEYS) next[k] = on ? DEFAULT_SETTINGS.notifications[k] : false;
+    if (on && !REMINDER_KEYS.some((k) => next[k])) next.leaveNow = true;
+    update({ notifications: next });
+  };
 
   const exportBackup = async () => {
     if (!db) return;
@@ -95,160 +109,223 @@ function SettingsForm() {
     }
   };
 
-  const deleteEverything = () => {
-    Alert.alert(
-      'Delete all local data?',
-      'This removes every course, session, absence, plan, and uploaded file from this device. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete everything',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await wipeAllData();
-              deleteAllSandboxFiles();
-              await rescheduleNotifications();
-              bump();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : String(e));
-            }
-          },
-        },
-      ],
-    );
+  const deleteEverything = async () => {
+    try {
+      await wipeAllData();
+      deleteAllSandboxFiles();
+      setConfirmWipe(false);
+      await rescheduleNotifications();
+      bump();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 64 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         {error ? <ErrorBox message={error} /> : null}
 
         <Subtitle>About you</Subtitle>
-        <Card>
-          <Field
-            label="Your name (used to sign absence-notice email drafts)"
-            value={studentName}
-            onChangeText={setStudentName}
-            onBlur={() => update({ studentName: studentName.trim() })}
-            placeholder="Adar Weinman"
-          />
-        </Card>
+        <SettingsGroup>
+          <SettingRow label="Name" helper="Used in absence-email drafts">
+            <Field
+              value={studentName}
+              onChangeText={setStudentName}
+              onBlur={() => update({ studentName: studentName.trim() })}
+              placeholder="Your name"
+              style={{ marginTop: 8 }}
+            />
+          </SettingRow>
+        </SettingsGroup>
 
-        <Subtitle>Notifications (all local — no server)</Subtitle>
-        <Card>
-          {toggle('Morning schedule summary', settings.notifications.morningSummary, (v) => updateNotif('morningSummary', v))}
-          <Field
-            label="Morning summary time (HH:MM)"
-            value={summaryTime}
-            onChangeText={setSummaryTime}
-            onBlur={() => {
-              const t = normalizeTime(summaryTime);
-              if (t) updateNotif('morningSummaryTime', t);
-              else setSummaryTime(settings.notifications.morningSummaryTime);
-            }}
-            autoCapitalize="none"
+        <Subtitle>Notifications</Subtitle>
+        <SettingsGroup>
+          <SettingRow
+            label="Notifications"
+            helper="Stored and scheduled on this device"
+            right={<AppSwitch value={masterOn} onValueChange={setMaster} />}
           />
-          {toggle('45 minutes before class', settings.notifications.before45, (v) => updateNotif('before45', v))}
-          {toggle('20 minutes before class', settings.notifications.before20, (v) => updateNotif('before20', v))}
-          {toggle('"Leave now" (walking-time aware)', settings.notifications.leaveNow, (v) => updateNotif('leaveNow', v))}
-          {toggle('10-minute warning', settings.notifications.before10, (v) => updateNotif('before10', v))}
-          {toggle('Catch-up plan reminders', settings.notifications.catchUpReminders, (v) => updateNotif('catchUpReminders', v))}
-          <Button label="Re-schedule notifications now" kind="secondary" onPress={rescheduleNotifications} />
-        </Card>
+          {masterOn ? (
+            <SettingRow
+              indent
+              label="Morning summary"
+              right={
+                <AppSwitch
+                  value={settings.notifications.morningSummary}
+                  onValueChange={(v) => updateNotif('morningSummary', v)}
+                />
+              }>
+              {settings.notifications.morningSummary ? (
+                <View style={{ marginTop: 8 }}>
+                  <TimeField
+                    value={settings.notifications.morningSummaryTime}
+                    onChange={(t) => updateNotif('morningSummaryTime', t)}
+                  />
+                </View>
+              ) : null}
+            </SettingRow>
+          ) : null}
+          {masterOn ? (
+            <SettingRow
+              indent
+              label="45 minutes before"
+              right={<AppSwitch value={settings.notifications.before45} onValueChange={(v) => updateNotif('before45', v)} />}
+            />
+          ) : null}
+          {masterOn ? (
+            <SettingRow
+              indent
+              label="20 minutes before"
+              right={<AppSwitch value={settings.notifications.before20} onValueChange={(v) => updateNotif('before20', v)} />}
+            />
+          ) : null}
+          {masterOn ? (
+            <SettingRow
+              indent
+              label="Leave now"
+              helper="Timed to your walk"
+              right={<AppSwitch value={settings.notifications.leaveNow} onValueChange={(v) => updateNotif('leaveNow', v)} />}
+            />
+          ) : null}
+          {masterOn ? (
+            <SettingRow
+              indent
+              label="10-minute warning"
+              right={<AppSwitch value={settings.notifications.before10} onValueChange={(v) => updateNotif('before10', v)} />}
+            />
+          ) : null}
+          {masterOn ? (
+            <SettingRow
+              indent
+              label="Catch-up reminders"
+              right={
+                <AppSwitch
+                  value={settings.notifications.catchUpReminders}
+                  onValueChange={(v) => updateNotif('catchUpReminders', v)}
+                />
+              }
+            />
+          ) : null}
+        </SettingsGroup>
+        {masterOn ? (
+          <Button label="Reschedule notifications" kind="secondary" compact onPress={rescheduleNotifications} />
+        ) : null}
 
         <Subtitle>Walking estimates</Subtitle>
-        <Card>
-          <Body secondary style={{ marginBottom: 8 }}>
-            Set your usual starting point (dorm/apartment) as coordinates — paste them from Google Maps
-            (long-press your home → tap the numbers). Used only on-device.
-          </Body>
-          <Field label="Start latitude" value={homeLat} onChangeText={setHomeLat} keyboardType="numbers-and-punctuation" placeholder="38.9847" />
-          <Field label="Start longitude" value={homeLon} onChangeText={setHomeLon} keyboardType="numbers-and-punctuation" placeholder="-76.9384" />
-          <Field label="Walking speed (m/s, 1.35 ≈ average)" value={walkSpeed} onChangeText={setWalkSpeed} keyboardType="decimal-pad" />
-          <Button
-            label="Save walking settings"
-            kind="secondary"
-            onPress={() => {
-              const lat = homeLat.trim() === '' ? null : Number(homeLat);
-              const lon = homeLon.trim() === '' ? null : Number(homeLon);
-              const speed = Number(walkSpeed);
-              if ((lat !== null && !Number.isFinite(lat)) || (lon !== null && !Number.isFinite(lon))) {
-                setError('Latitude/longitude must be numbers like 38.9847 and -76.9384.');
-                return;
-              }
-              if (!Number.isFinite(speed) || speed <= 0 || speed > 4) {
-                setError('Walking speed should be between 0.5 and 4 m/s.');
-                return;
-              }
-              update({ homeLat: lat, homeLon: lon, walkingSpeedMps: speed });
-            }}
-          />
-          <Button label="Edit campus buildings" kind="ghost" onPress={() => router.push('/buildings')} />
-        </Card>
+        <SettingsGroup>
+          <SettingRow
+            label="Starting point"
+            helper="Your dorm/apartment as coordinates — paste them from Google Maps (long-press home → tap the numbers). Used only on-device.">
+            <View style={{ marginTop: 10 }}>
+              <Field label="Latitude" value={homeLat} onChangeText={setHomeLat} keyboardType="numbers-and-punctuation" placeholder="38.9847" />
+              <Field label="Longitude" value={homeLon} onChangeText={setHomeLon} keyboardType="numbers-and-punctuation" placeholder="-76.9384" />
+              <Field label="Walking speed (m/s, 1.35 ≈ average)" value={walkSpeed} onChangeText={setWalkSpeed} keyboardType="decimal-pad" />
+              <Button
+                label="Save walking settings"
+                kind="secondary"
+                compact
+                onPress={() => {
+                  const lat = homeLat.trim() === '' ? null : Number(homeLat);
+                  const lon = homeLon.trim() === '' ? null : Number(homeLon);
+                  const speed = Number(walkSpeed);
+                  if ((lat !== null && !Number.isFinite(lat)) || (lon !== null && !Number.isFinite(lon))) {
+                    setError('Latitude/longitude must be numbers like 38.9847 and -76.9384.');
+                    return;
+                  }
+                  if (!Number.isFinite(speed) || speed <= 0 || speed > 4) {
+                    setError('Walking speed should be between 0.5 and 4 m/s.');
+                    return;
+                  }
+                  update({ homeLat: lat, homeLon: lon, walkingSpeedMps: speed });
+                }}
+              />
+            </View>
+          </SettingRow>
+          <SettingRow label="Campus buildings" helper="Entrances and walking-time overrides" onPress={() => router.push('/buildings')} right={<Body secondary>›</Body>} />
+        </SettingsGroup>
 
         <Subtitle>Appearance</Subtitle>
-        <Card>
-          <Row>
-            {(['system', 'light', 'dark'] as const).map((mode) => (
-              <View key={mode} style={{ flex: 1 }}>
-                <Button
-                  label={mode}
-                  kind={settings.darkMode === mode ? 'primary' : 'secondary'}
-                  compact
-                  onPress={() => update({ darkMode: mode })}
+        <SettingsGroup>
+          <SettingRow label="Theme">
+            <Row style={{ marginTop: 8 }}>
+              {(['system', 'light', 'dark'] as const).map((mode) => (
+                <View key={mode} style={{ flex: 1 }}>
+                  <Button
+                    label={mode}
+                    kind={settings.darkMode === mode ? 'primary' : 'secondary'}
+                    compact
+                    onPress={() => update({ darkMode: mode })}
+                  />
+                </View>
+              ))}
+            </Row>
+          </SettingRow>
+        </SettingsGroup>
+
+        <Subtitle>AI assistance</Subtitle>
+        <SettingsGroup>
+          <SettingRow
+            label="CLI provider"
+            helper="Off by default. Catch-up plans always work without AI using the built-in on-device analyzer. Enabling sends selected course materials to a local command — nothing is uploaded by the app itself. Requires running on a computer."
+            right={<AppSwitch value={settings.aiCliEnabled} onValueChange={(v) => update({ aiCliEnabled: v })} />}
+          />
+          {settings.aiCliEnabled ? (
+            <SettingRow indent label="Provider">
+              <View style={{ marginTop: 8 }}>
+                <Row style={{ marginBottom: 8 }}>
+                  {(['claude-cli', 'other-cli'] as const).map((id) => (
+                    <View key={id} style={{ flex: 1 }}>
+                      <Button
+                        label={id === 'claude-cli' ? 'Claude CLI' : 'Custom CLI'}
+                        kind={settings.aiProviderId === id ? 'primary' : 'secondary'}
+                        compact
+                        onPress={() => update({ aiProviderId: id })}
+                      />
+                    </View>
+                  ))}
+                </Row>
+                <Field
+                  label="Command path (e.g. claude)"
+                  value={cliPath}
+                  onChangeText={setCliPath}
+                  onBlur={() => update({ aiCliPath: cliPath.trim() })}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
-            ))}
-          </Row>
-        </Card>
-
-        <Subtitle>AI assistance (optional, off by default)</Subtitle>
-        <Card>
-          <Body secondary style={{ marginBottom: 8 }}>
-            Catch-up plans always work without AI using the built-in on-device analyzer.
-            Enabling a CLI provider sends the selected course materials to that local command —
-            nothing is ever uploaded by the app itself. Note: running a CLI requires the app to be
-            running on a computer (Expo web/dev); on a phone this stays unavailable and the
-            built-in analyzer is used.
-          </Body>
-          {toggle('Enable CLI provider (opt-in)', settings.aiCliEnabled, (v) => update({ aiCliEnabled: v }))}
-          {settings.aiCliEnabled ? (
-            <>
-              <Row style={{ marginBottom: 8 }}>
-                {(['claude-cli', 'other-cli'] as const).map((id) => (
-                  <View key={id} style={{ flex: 1 }}>
-                    <Button
-                      label={id === 'claude-cli' ? 'Claude CLI' : 'Custom CLI'}
-                      kind={settings.aiProviderId === id ? 'primary' : 'secondary'}
-                      compact
-                      onPress={() => update({ aiProviderId: id })}
-                    />
-                  </View>
-                ))}
-              </Row>
-              <Field
-                label="Command path (e.g. claude)"
-                value={cliPath}
-                onChangeText={setCliPath}
-                onBlur={() => update({ aiCliPath: cliPath.trim() })}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </>
+            </SettingRow>
           ) : null}
-        </Card>
+        </SettingsGroup>
 
         <Subtitle>Your data</Subtitle>
-        <Card>
-          <Body secondary style={{ marginBottom: 8 }}>
-            Everything lives in a local database and local files on this device. Uploaded course
-            files never leave the device unless you enable a provider above.
-          </Body>
-          <Button label="Export JSON backup" kind="secondary" onPress={exportBackup} />
-          <Button label="Restore from backup (Import screen)" kind="secondary" onPress={() => router.push('/import')} />
-          <Button label="Delete all local data" kind="danger" onPress={deleteEverything} />
-        </Card>
+        <SettingsGroup>
+          <SettingRow
+            label="Export JSON backup"
+            helper="Everything lives on this device; uploaded files never leave it unless you enable a provider above."
+            onPress={exportBackup}
+            right={<Body secondary>›</Body>}
+          />
+          <SettingRow label="Restore from backup" onPress={() => router.push('/import')} right={<Body secondary>›</Body>} />
+        </SettingsGroup>
+        {!confirmWipe ? (
+          <Button label="Delete all local data" kind="danger-outline" compact onPress={() => setConfirmWipe(true)} />
+        ) : (
+          <Card>
+            <Body style={{ marginBottom: 8 }}>
+              Delete every course, session, absence, plan, setting, and uploaded file from this
+              device? This cannot be undone.
+            </Body>
+            <Row>
+              <View style={{ flex: 1 }}>
+                <Button label="Delete everything" kind="danger" onPress={deleteEverything} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button label="Cancel" kind="secondary" onPress={() => setConfirmWipe(false)} />
+              </View>
+            </Row>
+          </Card>
+        )}
       </ScrollView>
     </Screen>
   );
