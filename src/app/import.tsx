@@ -7,7 +7,7 @@
 
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, View } from 'react-native';
 
 import {
   Badge,
@@ -46,7 +46,7 @@ import { defaultSemesterId, SEMESTER_PRESETS } from '@/lib/semesters';
 import { generateSessions } from '@/lib/sessions';
 import type { Course, MeetingPattern } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
-import { pickDocument, readTextFile, validateImportedFile } from '@/services/files';
+import { pickDocument, pickDocuments, readTextFile, validateImportedFile } from '@/services/files';
 import { OCR_AVAILABLE, ocrImage } from '@/services/ocr';
 import { fetchEnrichment } from '@/services/planetterp';
 import { fetchSectionProfessor } from '@/services/umdio';
@@ -64,7 +64,8 @@ export default function ImportScreen() {
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [done, setDone] = useState<string | null>(null);
-  const [ocrProgress, setOcrProgress] = useState<number | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<string | null>(null);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   // Semester selection (shared by the scan popup and the paste flow).
@@ -152,20 +153,27 @@ export default function ImportScreen() {
   const scanScreenshot = async () => {
     reset();
     try {
-      const picked = await pickDocument(['image/*']);
-      if (!picked) return;
-      setOcrProgress(0);
-      const result = await ocrImage(picked.uri, setOcrProgress);
-      setOcrProgress(null);
-      if (!result.ok) {
-        setError(result.error ?? 'Could not read that screenshot.');
-        return;
+      const picked = await pickDocuments(['image/*'], 3);
+      if (picked.length === 0) return;
+      const texts: string[] = [];
+      for (let i = 0; i < picked.length; i++) {
+        const prefix = picked.length > 1 ? `Screenshot ${i + 1}/${picked.length}: ` : '';
+        setOcrProgress(`${prefix}0%`);
+        const result = await ocrImage(picked[i].uri, (pct) => setOcrProgress(`${prefix}${pct}%`));
+        if (!result.ok) {
+          setOcrProgress(null);
+          setError(result.error ?? 'Could not read that screenshot.');
+          return;
+        }
+        texts.push(result.text);
       }
-      setPasteText(result.text);
-      const found = parseScheduleText(result.text);
+      setOcrProgress(null);
+      const combined = texts.join('\n\n');
+      setPasteText(combined);
+      const found = parseScheduleText(combined);
       if (found.courses.length > 0) {
         setModalError(null);
-        setScanModal({ codes: found.courses.map((co) => co.code), text: result.text });
+        setScanModal({ codes: found.courses.map((co) => co.code), text: combined });
       } else {
         setPasteOpen(true);
         setWarnings([
@@ -413,13 +421,13 @@ export default function ImportScreen() {
         {OCR_AVAILABLE ? (
           <Card>
             <Button
-              label={ocrProgress != null ? `Reading screenshot… ${ocrProgress}%` : 'Scan a schedule screenshot'}
+              label={ocrProgress != null ? `Reading… ${ocrProgress}` : 'Scan schedule screenshots'}
               icon="scan-outline"
               disabled={ocrProgress != null}
-              onPress={scanScreenshot}
+              onPress={() => setTutorialOpen(true)}
             />
             <Body secondary style={{ fontSize: 13 }}>
-              Testudo screenshot in, courses out — read entirely on your device.
+              Up to 3 Testudo screenshots in, courses out — read entirely on your device.
             </Body>
           </Card>
         ) : null}
@@ -499,6 +507,32 @@ export default function ImportScreen() {
           <TextLink label="Restore JSON backup" icon="archive-outline" onPress={restoreBackupFlow} />
         </Row>
       </ScrollView>
+
+      {/* Pre-scan tutorial: what a good screenshot looks like. */}
+      <Modal visible={tutorialOpen} transparent animationType="fade" onRequestClose={() => setTutorialOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 }}>
+          <Card style={{ maxHeight: '88%' }}>
+            <ScrollView>
+              <Body style={{ fontFamily: FONT.bold, fontSize: 17 }}>Screenshot your Testudo schedule</Body>
+              <Body secondary style={{ fontSize: 13.5, marginTop: 6 }}>
+                1. On Testudo, open <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Student Schedule</Body>.{'\n'}
+                2. Tap the arrow on each course to expand it — that reveals the full course name and
+                professor so the app can import them too.{'\n'}
+                3. Screenshot the whole list (up to 3 screenshots if it&apos;s long — select them all
+                at once). It should look like this:
+              </Body>
+              <Image
+                source={require('../../assets/scan-example.png')}
+                accessibilityLabel="Example Testudo schedule screenshot with each course expanded"
+                style={{ width: '100%', aspectRatio: 720 / 1000, borderRadius: 8, marginVertical: 10 }}
+                resizeMode="contain"
+              />
+              <Button label="Choose screenshots" icon="images-outline" onPress={() => { setTutorialOpen(false); scanScreenshot(); }} />
+              <Button label="Cancel" kind="ghost" onPress={() => setTutorialOpen(false)} />
+            </ScrollView>
+          </Card>
+        </View>
+      </Modal>
 
       {/* Post-scan popup: pick the semester, import everything in one tap. */}
       <Modal visible={scanModal != null} transparent animationType="fade" onRequestClose={() => setScanModal(null)}>

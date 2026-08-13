@@ -30,14 +30,24 @@ export interface PickedDocument {
 export async function pickDocument(
   mimeTypes?: string[],
 ): Promise<PickedDocument | null> {
+  const picked = await pickDocuments(mimeTypes, 1);
+  return picked[0] ?? null;
+}
+
+/** Pick up to `max` files at once (multi-screenshot scans). */
+export async function pickDocuments(
+  mimeTypes: string[] | undefined,
+  max: number,
+): Promise<PickedDocument[]> {
   const result = await DocumentPicker.getDocumentAsync({
     type: mimeTypes ?? ['application/pdf', 'text/*', 'message/rfc822', '*/*'],
     copyToCacheDirectory: true,
-    multiple: false,
+    multiple: max > 1,
   });
-  if (result.canceled || result.assets.length === 0) return null;
-  const a = result.assets[0];
-  return { uri: a.uri, name: a.name, mimeType: a.mimeType ?? null, size: a.size ?? null };
+  if (result.canceled || result.assets.length === 0) return [];
+  return result.assets
+    .slice(0, max)
+    .map((a) => ({ uri: a.uri, name: a.name, mimeType: a.mimeType ?? null, size: a.size ?? null }));
 }
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;

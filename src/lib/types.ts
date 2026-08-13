@@ -285,6 +285,11 @@ export interface AppSettings {
   darkMode: 'system' | 'light' | 'dark';
   /** Used to sign absence-notice email drafts. */
   studentName: string;
+  /**
+   * Web-only, off by default: deliver reminders as push notifications via
+   * the app's own relay while the PWA is closed.
+   */
+  webPushEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -306,6 +311,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiCliPath: '',
   darkMode: 'system',
   studentName: '',
+  webPushEnabled: false,
 };
 
 /** Importance of physically attending a specific class session. */

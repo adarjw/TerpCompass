@@ -171,6 +171,32 @@ from. Nothing in a catch-up plan is shown without one, except the explicit
   execution) before analysis, and analysis always shows a confirmation screen
   before touching your schedule.
 
+## Web push notifications (opt-in relay)
+
+A closed browser tab can't fire OS alarms, so the web/PWA build offers real
+push notifications through the app's own tiny relay (`api/push/*` on the same
+Vercel deployment — no third-party service):
+
+- **Client**: `public/sw.js` shows pushes; `src/services/webpush.ts` subscribes
+  (VAPID) and mirrors the same plan the native scheduler uses
+  (`src/lib/notificationPlan.ts`) to the relay on every schedule change.
+- **Relay**: `api/push/sync.ts` stores exactly one record per device — the push
+  subscription plus pending reminder texts (future-only, nearest 60, ≤30 days
+  out), replaced wholesale on each sync. `api/push/tick.ts` (called every ~5 min
+  by `.github/workflows/push-tick.yml`) sends whatever is due, deletes each
+  reminder as it's sent, and deletes the whole record when the subscription is
+  revoked (410/404) or stays empty 45+ days. Turning the toggle off deletes the
+  record immediately.
+- **Setup (one-time)**: create a Blob store on the Vercel project (Storage →
+  Blob), add env vars `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+  `PUSH_TICK_SECRET` (and optionally `VAPID_CONTACT`), and add the same
+  `PUSH_TICK_SECRET` as a GitHub Actions secret. The public key is also
+  hardcoded in `src/services/webpush.ts`.
+- Timing granularity is the cron interval (~5 min); the tick sends anything due
+  within the next 3 minutes so "leave now" errs early rather than late.
+- iPhone: requires iOS 16.4+ and the app added to the home screen; enable the
+  toggle from inside the installed app.
+
 ## Trying it out
 
 From the Home screen (when you have no classes yet), tap **"Load demo data

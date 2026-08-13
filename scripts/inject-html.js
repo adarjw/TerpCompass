@@ -35,6 +35,9 @@ const headExtras = [
   // ends up behind the toolbar/home indicator. dvh tracks the visible
   // viewport dynamically and fixes the bottom of the app being clipped.
   '<style>@supports (height: 100dvh) { html, body, #root { height: 100dvh !important; } }</style>',
+  // Service worker powers web-push reminders (sw.js shows them; it never
+  // intercepts fetches, so the app itself stays network-served).
+  "<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}</script>",
 ].join('\n    ');
 
 html = html.replace('</head>', `    ${headExtras}\n  </head>`);

@@ -2,7 +2,7 @@
 
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, Share, View } from 'react-native';
+import { Platform, ScrollView, Share, View } from 'react-native';
 
 import { TimeField } from '@/components/TimeField';
 import {
@@ -34,6 +34,7 @@ import {
 import { buildBackup } from '@/lib/backup';
 import { DEFAULT_SETTINGS, type AppSettings } from '@/lib/types';
 import { deleteAllSandboxFiles, writeExportFile } from '@/services/files';
+import { disableWebPush, enableWebPush, isPushSupported } from '@/services/webpush';
 import { useApp } from '@/state/AppContext';
 
 export default function SettingsScreen() {
@@ -87,6 +88,27 @@ function SettingsForm() {
     for (const k of REMINDER_KEYS) next[k] = on ? DEFAULT_SETTINGS.notifications[k] : false;
     if (on && !REMINDER_KEYS.some((k) => next[k])) next.leaveNow = true;
     update({ notifications: next });
+  };
+
+  const [pushBusy, setPushBusy] = useState(false);
+  const togglePush = async (on: boolean) => {
+    setPushBusy(true);
+    try {
+      if (on) {
+        const result = await enableWebPush();
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        await update({ webPushEnabled: true }); // update() also syncs the relay
+      } else {
+        await disableWebPush();
+        await update({ webPushEnabled: false });
+      }
+      setError(null);
+    } finally {
+      setPushBusy(false);
+    }
   };
 
   const exportBackup = async () => {
@@ -146,6 +168,23 @@ function SettingsForm() {
             helper="Stored and scheduled on this device"
             right={<AppSwitch value={masterOn} onValueChange={setMaster} />}
           />
+          {Platform.OS === 'web' ? (
+            <SettingRow
+              label="Push notifications"
+              helper={
+                isPushSupported()
+                  ? 'Reminders arrive even while the app is closed. Only your pending reminders are kept on the relay — each is deleted as soon as it’s sent, and everything is deleted if you turn this off.'
+                  : 'Not available in this browser. On iPhone, add the app to your home screen first, then enable this inside the installed app.'
+              }
+              right={
+                <AppSwitch
+                  value={settings.webPushEnabled}
+                  onValueChange={togglePush}
+                  disabled={pushBusy || !isPushSupported()}
+                />
+              }
+            />
+          ) : null}
           {masterOn ? (
             <SettingRow
               indent

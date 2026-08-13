@@ -1,0 +1,19 @@
+# Fires the web-push relay every ~5 minutes so due class reminders get sent
+# even while the PWA is closed. Requires the PUSH_TICK_SECRET repo secret
+# (same value as the Vercel env var of that name).
+name: push-tick
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call relay tick
+        run: |
+          curl -fsS --max-time 60 \
+            -H "Authorization: Bearer ${{ secrets.PUSH_TICK_SECRET }}" \
+            "https://terp-compass.vercel.app/api/push/tick"

@@ -225,7 +225,7 @@ export function parseScheduleText(text: string): ScheduleTextResult {
       }
     }
 
-    const patterns: PatternDraft[] = [];
+    let patterns: PatternDraft[] = [];
     let anyUnparsed = false;
 
     if (componentStarts.length === 0) {
@@ -243,6 +243,30 @@ export function parseScheduleText(text: string): ScheduleTextResult {
         const pattern = parseComponentRow(label, rowText);
         if (pattern) patterns.push(pattern);
         else anyUnparsed = true;
+      }
+    }
+
+    // Column-read fallback: on the dropdown-expanded cards, OCR sometimes
+    // emits all the component words first ("Lecture / Discussion / Final")
+    // and all the day+time rows after them, so each component's own segment
+    // holds no time and parses to nothing. When that leaves fewer patterns
+    // than component words, parse every day+time line in the block on its
+    // own and pair them with the component labels in reading order (rooms
+    // are recovered the same way just below).
+    const wantedLabels = componentStarts.filter((c) => !c.skip).map((c) => c.label);
+    if (componentStarts.length > 0 && patterns.length < wantedLabels.length) {
+      const rowPatterns: PatternDraft[] = [];
+      for (const l of lines) {
+        if (COMPONENT_LINE_RE.test(l)) continue;
+        const p = parseComponentRow('other', l);
+        if (p) rowPatterns.push(p);
+      }
+      if (rowPatterns.length > patterns.length) {
+        patterns = rowPatterns.map((p, i) => ({
+          ...p,
+          label: wantedLabels[i] ?? p.label,
+        }));
+        anyUnparsed = patterns.length < wantedLabels.length;
       }
     }
 

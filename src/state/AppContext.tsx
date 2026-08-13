@@ -24,6 +24,7 @@ import {
 } from '../db/repo';
 import { seedBuildingsIfEmpty } from '../db/seed';
 import { rescheduleAll } from '../services/notifications';
+import { syncWebPush } from '../services/webpush';
 import type { AppSettings } from '../lib/types';
 import { DEFAULT_SETTINGS } from '../lib/types';
 
@@ -85,6 +86,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         tasksRepo.all(db),
       ]);
       await rescheduleAll(db, { sessions, courses, buildings, tasks });
+      // Web push mirrors the same plan to the relay (no-op when disabled).
+      const current = await settingsRepo.get(db);
+      await syncWebPush({ sessions, courses, buildings, tasks }, current);
     } catch {
       // Notification failures must never break data flows.
     }
