@@ -68,11 +68,21 @@ export const coursesRepo = {
     return r ? rowToCourse(r) : null;
   },
   async upsert(db: SqlExecutor, c: Course): Promise<void> {
+    // Never INSERT OR REPLACE here: with foreign_keys ON, REPLACE deletes
+    // the existing row first, which CASCADEs away the course's patterns,
+    // sessions, absences, and resources. ON CONFLICT updates in place.
     await db.runAsync(
-      `INSERT OR REPLACE INTO courses
+      `INSERT INTO courses
        (id, code, name, professor, professor_email, ta_emails, semester_start, semester_end,
         attendance_policy, walking_buffer_min, color, created_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET
+         code=excluded.code, name=excluded.name, professor=excluded.professor,
+         professor_email=excluded.professor_email, ta_emails=excluded.ta_emails,
+         semester_start=excluded.semester_start, semester_end=excluded.semester_end,
+         attendance_policy=excluded.attendance_policy,
+         walking_buffer_min=excluded.walking_buffer_min,
+         color=excluded.color, created_at=excluded.created_at`,
       [
         c.id, c.code, c.name, c.professor, c.professorEmail ?? null, c.taEmails ?? null,
         c.semesterStart, c.semesterEnd, c.attendancePolicy ?? null,
@@ -141,10 +151,16 @@ export const patternsRepo = {
   },
   async insertMany(db: SqlExecutor, patterns: MeetingPattern[]): Promise<void> {
     for (const p of patterns) {
+      // ON CONFLICT (not REPLACE): REPLACE would CASCADE-delete the
+      // pattern's generated class_sessions.
       await db.runAsync(
-        `INSERT OR REPLACE INTO meeting_patterns
+        `INSERT INTO meeting_patterns
          (id, course_id, label, building, room, meeting_days, start_time, end_time)
-         VALUES (?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+           course_id=excluded.course_id, label=excluded.label, building=excluded.building,
+           room=excluded.room, meeting_days=excluded.meeting_days,
+           start_time=excluded.start_time, end_time=excluded.end_time`,
         [p.id, p.courseId, p.label, p.building, p.room, JSON.stringify(p.meetingDays), p.startTime, p.endTime],
       );
     }
@@ -196,11 +212,20 @@ export const sessionsRepo = {
   },
   async insertMany(db: SqlExecutor, sessions: ClassSession[]): Promise<void> {
     for (const s of sessions) {
+      // ON CONFLICT (not REPLACE): REPLACE would CASCADE-delete the
+      // session's notes, absences, and scheduled-notification records.
       await db.runAsync(
-        `INSERT OR REPLACE INTO class_sessions
+        `INSERT INTO class_sessions
          (id, course_id, pattern_id, pattern_label, date, start_time, end_time, building, room,
           status, change_note, override_building, override_room)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+           course_id=excluded.course_id, pattern_id=excluded.pattern_id,
+           pattern_label=excluded.pattern_label, date=excluded.date,
+           start_time=excluded.start_time, end_time=excluded.end_time,
+           building=excluded.building, room=excluded.room, status=excluded.status,
+           change_note=excluded.change_note, override_building=excluded.override_building,
+           override_room=excluded.override_room`,
         [
           s.id, s.courseId, s.patternId, s.patternLabel, s.date, s.startTime, s.endTime,
           s.building, s.room, s.status,
@@ -275,9 +300,15 @@ export const absencesRepo = {
     return rows.map(rowToAbsence);
   },
   async insert(db: SqlExecutor, a: Absence): Promise<void> {
+    // ON CONFLICT (not REPLACE): REPLACE would CASCADE-delete the linked
+    // catch-up plan.
     await db.runAsync(
-      `INSERT OR REPLACE INTO absences (id, session_id, course_id, date, reason, recorded_at, catch_up_plan_id)
-       VALUES (?,?,?,?,?,?,?)`,
+      `INSERT INTO absences (id, session_id, course_id, date, reason, recorded_at, catch_up_plan_id)
+       VALUES (?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET
+         session_id=excluded.session_id, course_id=excluded.course_id, date=excluded.date,
+         reason=excluded.reason, recorded_at=excluded.recorded_at,
+         catch_up_plan_id=excluded.catch_up_plan_id`,
       [a.id, a.sessionId, a.courseId, a.date, a.reason ?? null, a.recordedAt, a.catchUpPlanId ?? null],
     );
   },
@@ -322,10 +353,18 @@ export const resourcesRepo = {
     return rows.map(rowToResource);
   },
   async insert(db: SqlExecutor, res: Resource): Promise<void> {
+    // ON CONFLICT (not REPLACE): REPLACE would CASCADE-delete the
+    // resource's extracted text chunks.
     await db.runAsync(
-      `INSERT OR REPLACE INTO resources
+      `INSERT INTO resources
        (id, course_id, kind, title, file_uri, original_filename, url, added_at, extraction_status, extraction_error)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET
+         course_id=excluded.course_id, kind=excluded.kind, title=excluded.title,
+         file_uri=excluded.file_uri, original_filename=excluded.original_filename,
+         url=excluded.url, added_at=excluded.added_at,
+         extraction_status=excluded.extraction_status,
+         extraction_error=excluded.extraction_error`,
       [
         res.id, res.courseId, res.kind, res.title, res.fileUri ?? null,
         res.originalFilename ?? null, res.url ?? null, res.addedAt,
@@ -446,11 +485,18 @@ export const plansRepo = {
       deeperVersion: p.deeperVersion,
       quiz: p.quiz,
     };
+    // ON CONFLICT (not REPLACE): REPLACE would CASCADE-delete the plan's tasks.
     await db.runAsync(
-      `INSERT OR REPLACE INTO catch_up_plans
+      `INSERT INTO catch_up_plans
        (id, absence_id, course_id, session_date, created_at, generated_by, ai_generated,
         likely_topic, confidence, notice, payload, user_notes)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(id) DO UPDATE SET
+         absence_id=excluded.absence_id, course_id=excluded.course_id,
+         session_date=excluded.session_date, created_at=excluded.created_at,
+         generated_by=excluded.generated_by, ai_generated=excluded.ai_generated,
+         likely_topic=excluded.likely_topic, confidence=excluded.confidence,
+         notice=excluded.notice, payload=excluded.payload, user_notes=excluded.user_notes`,
       [
         p.id, p.absenceId, p.courseId, p.sessionDate, p.createdAt, p.generatedBy,
         p.aiGenerated ? 1 : 0, p.likelyTopic, p.confidence, p.notice ?? null,

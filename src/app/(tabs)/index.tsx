@@ -421,8 +421,7 @@ function FocusCard({
         </Text>
       </Row>
 
-      {/* Slim gold rail marks the focused course — same mark the timeline dots echo. */}
-      <Card style={{ borderLeftWidth: 3, borderLeftColor: c.gold }}>
+      <Card>
         <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.accent, letterSpacing: 0.2 }}>
           {course.code}
         </Text>
