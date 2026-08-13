@@ -269,3 +269,16 @@ end-to-end in the Expo web preview using the demo data seed.
   outer component that returns `<Loading />` until `ready`, and an inner
   `SettingsForm` that only mounts afterward. Follow the same pattern for any
   new screen with editable fields seeded from context.
+- **`expo-file-system`'s `File`/`Directory` classes have no web
+  implementation** — every native method is a no-op stub there
+  (`ExpoFileSystem.web.ts`), so constructing one throws. Native code
+  (`services/files.ts`'s `resourcesDir`/`sandboxDir`) still uses them for a
+  real sandbox directory on disk. Web instead stores picked bytes as BLOB
+  rows in a `sandbox_blobs` table and hands out a synthetic
+  `sandbox-blob://<id>` URI in their place; reading text/PDF bytes from a
+  freshly picked file goes straight through the browser's `Blob`/`File` APIs
+  instead, sidestepping the unsupported classes entirely. `SandboxImage`
+  (`components/SandboxImage.tsx`) resolves a stored URI to something
+  `<Image>` can render — a real `file://` path on native, or a freshly
+  regenerated `data:` URI on web (unlike a `blob:` object URL, that survives
+  a reload since it's rebuilt from durably stored bytes each time).

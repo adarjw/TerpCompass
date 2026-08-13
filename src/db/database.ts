@@ -138,6 +138,7 @@ export async function wipeScheduleData(): Promise<void> {
     DELETE FROM calendar_events;
     DELETE FROM courses;
     DELETE FROM planetterp_cache;
+    DELETE FROM sandbox_blobs;
   `);
 }
 
@@ -159,6 +160,7 @@ export async function wipeAllData(): Promise<void> {
     DELETE FROM campus_locations;
     DELETE FROM walk_recordings;
     DELETE FROM planetterp_cache;
+    DELETE FROM sandbox_blobs;
     DELETE FROM app_settings;
   `);
   await migrate(db);

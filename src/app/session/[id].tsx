@@ -7,8 +7,9 @@
 
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Image, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
+import { SandboxImage } from '@/components/SandboxImage';
 import {
   Badge,
   Body,
@@ -101,13 +102,14 @@ export default function SessionScreen() {
   const removeNote = async (noteId: string) => {
     if (!db) return;
     const note = notes.find((n) => n.id === noteId);
-    deleteSandboxFile(note?.photoUri);
+    await deleteSandboxFile(db, note?.photoUri);
     await notesRepo.remove(db, noteId);
     setNotes(await notesRepo.forSession(db, session.id));
     bump();
   };
 
   const pickPhoto = async (mode: 'raw' | 'cropped') => {
+    if (!db) return;
     setError(null);
     try {
       const picked = await pickDocument(['image/*']);
@@ -118,12 +120,12 @@ export default function SessionScreen() {
         return;
       }
       if (mode === 'raw') {
-        setPhoto({ uri: copyNotePhotoIntoSandbox(picked), mode });
+        setPhoto({ uri: await copyNotePhotoIntoSandbox(db, picked), mode });
         return;
       }
       setPhotoBusy(true);
       const result = await autoCropNotePhoto(picked.uri);
-      const uri = copyNotePhotoIntoSandbox({
+      const uri = await copyNotePhotoIntoSandbox(db, {
         uri: result.uri,
         name: picked.name,
         mimeType: picked.mimeType,
@@ -137,8 +139,8 @@ export default function SessionScreen() {
     }
   };
 
-  const clearDraftPhoto = () => {
-    deleteSandboxFile(photo?.uri);
+  const clearDraftPhoto = async () => {
+    if (db) await deleteSandboxFile(db, photo?.uri);
     setPhoto(null);
   };
 
@@ -195,7 +197,7 @@ export default function SessionScreen() {
           {photo ? (
             <View style={{ marginBottom: 10 }}>
               <View style={{ width: '100%', height: 160, borderRadius: 8, overflow: 'hidden' }}>
-                <Image source={{ uri: photo.uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                <SandboxImage uri={photo.uri} style={{ width: '100%', height: '100%' }} />
               </View>
               <Row style={{ justifyContent: 'space-between', marginTop: 4 }}>
                 <Badge label={photo.mode === 'raw' ? 'Raw' : 'Cropped'} />
@@ -275,7 +277,7 @@ export default function SessionScreen() {
               </Row>
               {n.photoUri ? (
                 <View style={{ width: '100%', height: 180, borderRadius: 8, overflow: 'hidden', marginTop: 8 }}>
-                  <Image source={{ uri: n.photoUri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+                  <SandboxImage uri={n.photoUri} style={{ width: '100%', height: '100%' }} />
                 </View>
               ) : null}
             </Card>

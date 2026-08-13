@@ -169,7 +169,7 @@ export default function CourseScreen() {
         onPress: async () => {
           if (!db) return;
           await resourcesRepo.remove(db, res.id);
-          deleteSandboxFile(res.fileUri);
+          await deleteSandboxFile(db, res.fileUri);
           bump();
         },
       },
