@@ -121,6 +121,7 @@ export async function wipeAllData(): Promise<void> {
     DELETE FROM courses;
     DELETE FROM campus_locations;
     DELETE FROM walk_recordings;
+    DELETE FROM planetterp_cache;
     DELETE FROM app_settings;
   `);
   await migrate(db);

@@ -656,6 +656,29 @@ export const walkRecordingsRepo = {
   },
 };
 
+// ---------- PlanetTerp cache ----------
+
+export const planetTerpCacheRepo = {
+  async get<T>(db: SqlExecutor, courseCode: string): Promise<{ payload: T; fetchedAt: string } | null> {
+    const row = await db.getFirstAsync<{ payload: string; fetched_at: string }>(
+      `SELECT payload, fetched_at FROM planetterp_cache WHERE course_code = ?`,
+      [courseCode.toUpperCase()],
+    );
+    if (!row) return null;
+    try {
+      return { payload: JSON.parse(row.payload) as T, fetchedAt: row.fetched_at };
+    } catch {
+      return null;
+    }
+  },
+  async set(db: SqlExecutor, courseCode: string, payload: unknown): Promise<void> {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO planetterp_cache (course_code, payload, fetched_at) VALUES (?,?,?)`,
+      [courseCode.toUpperCase(), JSON.stringify(payload), new Date().toISOString()],
+    );
+  },
+};
+
 // ---------- settings ----------
 
 const SETTINGS_KEY = 'app_settings_v1';

@@ -1,6 +1,6 @@
 /** SQLite DDL. Version-gated so future migrations are additive. */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS courses (
@@ -169,6 +169,14 @@ CREATE TABLE IF NOT EXISTS walk_recordings (
   recorded_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_walk_recordings_route ON walk_recordings(from_label, to_building);
+
+-- Cached PlanetTerp enrichment per course code, so fetched data (title,
+-- professors, GPA, attendance hints) keeps working offline.
+CREATE TABLE IF NOT EXISTS planetterp_cache (
+  course_code TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
 `;
 
 /** Tables dropped and recreated by a destructive schema migration, in FK-safe order. */
@@ -184,4 +192,5 @@ export const ALL_TABLES = [
   'calendar_events',
   'courses',
   'campus_locations',
+  'planetterp_cache',
 ];

@@ -24,6 +24,7 @@ import {
   coursesRepo,
   locationsRepo,
   patternsRepo,
+  planetTerpCacheRepo,
   resourcesRepo,
 } from '@/db/repo';
 import { findBuilding } from '@/lib/campus';
@@ -37,6 +38,7 @@ import {
   deleteSandboxFile,
   pickDocument,
 } from '@/services/files';
+import { fetchEnrichment, type PlanetTerpEnrichment } from '@/services/planetterp';
 import { useApp } from '@/state/AppContext';
 
 const KIND_LABELS: { kind: ResourceKind; label: string }[] = [
@@ -61,22 +63,68 @@ export default function CourseScreen() {
   const [pasteMode, setPasteMode] = useState<ResourceKind | null>(null);
   const [pasteTitle, setPasteTitle] = useState('');
   const [pasteText, setPasteText] = useState('');
+  const [enrich, setEnrich] = useState<PlanetTerpEnrichment | null>(null);
+  const [enrichBusy, setEnrichBusy] = useState(false);
+  const [enrichNote, setEnrichNote] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
         if (!db || !id) return;
-        setCourse(await coursesRepo.byId(db, id));
+        const loaded = await coursesRepo.byId(db, id);
+        setCourse(loaded);
         setPatterns(await patternsRepo.forCourse(db, id));
         setBuildings(await locationsRepo.all(db));
         setResources(await resourcesRepo.forCourse(db, id));
         setAbsences(await absencesRepo.forCourse(db, id));
+        if (loaded) {
+          const cached = await planetTerpCacheRepo.get<PlanetTerpEnrichment>(db, loaded.code);
+          setEnrich(cached?.payload ?? null);
+        }
       })();
       // eslint-disable-next-line react-hooks/exhaustive-deps -- version bumps trigger a reload
     }, [db, id, version]),
   );
 
   if (!course) return <Loading />;
+
+  const runEnrich = async () => {
+    if (!db) return;
+    setEnrichBusy(true);
+    setEnrichNote(null);
+    try {
+      const result = await fetchEnrichment(course.code, course.professor);
+      if (!result.ok) {
+        setEnrichNote(result.error);
+        return;
+      }
+      await planetTerpCacheRepo.set(db, course.code, result.value);
+      setEnrich(result.value);
+      // Autofill the real course title when the name is still just the code
+      // (typical after a screenshot import) — factual, low-risk, reversible
+      // via Edit.
+      if (result.value.title && course.name.trim() === course.code) {
+        await coursesRepo.upsert(db, { ...course, name: result.value.title });
+        setEnrichNote(`Course name set to "${result.value.title}".`);
+        bump();
+      }
+    } finally {
+      setEnrichBusy(false);
+    }
+  };
+
+  const acceptPolicySuggestion = async () => {
+    if (!db || !enrich?.policySuggestion) return;
+    await coursesRepo.upsert(db, { ...course, attendancePolicy: enrich.policySuggestion });
+    setEnrichNote('Attendance policy filled from PlanetTerp reviews — replace it with the syllabus wording when you have it.');
+    bump();
+  };
+
+  const setProfessor = async (name: string) => {
+    if (!db) return;
+    await coursesRepo.upsert(db, { ...course, professor: name });
+    bump();
+  };
 
   const semesterYear = Number(course.semesterStart.slice(0, 4)) || new Date().getFullYear();
 
@@ -207,6 +255,85 @@ export default function CourseScreen() {
             ))}
           </Card>
         ) : null}
+
+        <Subtitle>PlanetTerp</Subtitle>
+        <Card>
+          {enrichNote ? (
+            <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
+              {enrichNote}
+            </Body>
+          ) : null}
+          {enrich ? (
+            <>
+              <Row style={{ flexWrap: 'wrap', marginBottom: 6 }}>
+                {enrich.averageGpa != null ? <Badge label={`Avg GPA ${enrich.averageGpa}`} /> : null}
+                {Object.entries(enrich.professorRatings).map(([name, rating]) => (
+                  <Badge key={name} label={`${name}: ${rating}/5`} tone={rating >= 3.5 ? 'success' : rating < 2.5 ? 'warning' : 'neutral'} />
+                ))}
+              </Row>
+              {!course.professor && enrich.professors.length > 0 ? (
+                <>
+                  <Body secondary style={{ fontSize: 13, marginBottom: 4 }}>
+                    Set the professor (improves review matching):
+                  </Body>
+                  <Row style={{ flexWrap: 'wrap', marginBottom: 6 }}>
+                    {enrich.professors.slice(0, 4).map((name) => (
+                      <View key={name} style={{ minWidth: 120 }}>
+                        <Button label={name} kind="secondary" compact onPress={() => setProfessor(name)} />
+                      </View>
+                    ))}
+                  </Row>
+                </>
+              ) : null}
+              {enrich.hints.length > 0 ? (
+                <>
+                  <Body style={{ fontFamily: FONT.bold, fontSize: 14, marginTop: 4 }}>
+                    What reviews say about attendance
+                  </Body>
+                  {enrich.hints.slice(0, 4).map((h, i) => (
+                    <Body key={i} secondary style={{ fontSize: 13, marginTop: 4 }}>
+                      &ldquo;{h.text}&rdquo;{h.course ? ` — ${h.course} review` : ' — review'}
+                    </Body>
+                  ))}
+                  {enrich.policySuggestion ? (
+                    <Button
+                      label={course.attendancePolicy ? 'Replace attendance policy with this' : 'Use as attendance policy'}
+                      kind="secondary"
+                      compact
+                      icon="download-outline"
+                      onPress={acceptPolicySuggestion}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <Body secondary style={{ fontSize: 13 }}>
+                  No attendance mentions found in reviews for this course.
+                </Body>
+              )}
+              <Button
+                label={enrichBusy ? 'Refreshing…' : 'Refresh'}
+                kind="ghost"
+                compact
+                disabled={enrichBusy}
+                onPress={runEnrich}
+              />
+            </>
+          ) : (
+            <>
+              <Body secondary style={{ fontSize: 13, marginBottom: 6 }}>
+                Pull the real course title, professor ratings, and what student reviews say about
+                attendance — free, no account, fetched only when you tap and cached for offline use.
+              </Body>
+              <Button
+                label={enrichBusy ? 'Fetching…' : 'Fetch from PlanetTerp'}
+                kind="secondary"
+                icon="cloud-download-outline"
+                disabled={enrichBusy}
+                onPress={runEnrich}
+              />
+            </>
+          )}
+        </Card>
 
         <Subtitle>Resources</Subtitle>
         {error ? <ErrorBox message={error} /> : null}

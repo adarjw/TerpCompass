@@ -1,11 +1,13 @@
 /**
- * Import hub: .ics, CSV, pasted screenshot text, and JSON backup restore.
- * Every path shows a preview + warnings before anything is written.
+ * Import hub. Priority order: scan a screenshot (OCR, on-device) → paste
+ * text → calendar/CSV file → restore backup. Scans finish in a popup that
+ * asks which semester it is (summer additionally asks which session — only
+ * when Summer is explicitly chosen) and imports everything in one tap.
  */
 
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Modal, ScrollView, View } from 'react-native';
 
 import {
   Badge,
@@ -14,11 +16,12 @@ import {
   Card,
   ErrorBox,
   Field,
+  FONT,
   Row,
   Screen,
   Subtitle,
+  TextLink,
   useColors,
-  FONT,
 } from '@/components/ui';
 import {
   absencesRepo,
@@ -37,6 +40,7 @@ import { parseCsvSchedule, normalizeDate } from '@/lib/csv';
 import { parseIcs, type CalendarEventDraft, type CourseDraft } from '@/lib/ics';
 import { makeId } from '@/lib/ids';
 import { parseScheduleText } from '@/lib/scheduleText';
+import { defaultSemesterId, SEMESTER_PRESETS } from '@/lib/semesters';
 import { generateSessions } from '@/lib/sessions';
 import type { Course, MeetingPattern } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
@@ -55,12 +59,35 @@ export default function ImportScreen() {
   const [events, setEvents] = useState<CalendarEventDraft[]>([]);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
-  const [pasteSemStart, setPasteSemStart] = useState('');
-  const [pasteSemEnd, setPasteSemEnd] = useState('');
   const [done, setDone] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState<number | null>(null);
-  const [scanSummary, setScanSummary] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  // Semester selection (shared by the scan popup and the paste flow).
+  const [semesterId, setSemesterId] = useState<string>(defaultSemesterId(new Date()));
+  const [summerSessionId, setSummerSessionId] = useState<string | null>(null);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+
+  // Scan-result popup state.
+  const [scanModal, setScanModal] = useState<{ codes: string[]; text: string } | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const resolveSemesterDates = (): { start: string; end: string } | null => {
+    if (semesterId === 'custom') {
+      const start = normalizeDate(customStart);
+      const end = normalizeDate(customEnd);
+      return start && end && end > start ? { start, end } : null;
+    }
+    const preset = SEMESTER_PRESETS.find((s) => s.id === semesterId);
+    if (!preset) return null;
+    if (preset.sessions?.length) {
+      const session = preset.sessions.find((s) => s.id === summerSessionId);
+      return session ? { start: session.start, end: session.end } : null;
+    }
+    return { start: preset.start, end: preset.end };
+  };
 
   const reset = () => {
     setError(null);
@@ -68,10 +95,9 @@ export default function ImportScreen() {
     setDrafts([]);
     setEvents([]);
     setDone(null);
-    setScanSummary(null);
   };
 
-  const pickAndParse = async (kind: 'ics' | 'csv' | 'backup') => {
+  const pickAndParseFile = async () => {
     reset();
     try {
       const picked = await pickDocument(['*/*']);
@@ -82,7 +108,8 @@ export default function ImportScreen() {
         return;
       }
       const text = await readTextFile(picked.uri);
-      if (kind === 'ics' || (kind !== 'backup' && picked.name.toLowerCase().endsWith('.ics'))) {
+      const lower = picked.name.toLowerCase();
+      if (lower.endsWith('.ics')) {
         const result = parseIcs(text);
         setDrafts(result.courses);
         setEvents(result.events);
@@ -90,13 +117,27 @@ export default function ImportScreen() {
         if (result.courses.length === 0 && result.events.length === 0 && result.warnings.length === 0) {
           setError('Nothing importable was found in that calendar.');
         }
-      } else if (kind === 'csv') {
+      } else if (lower.endsWith('.csv')) {
         const result = parseCsvSchedule(text);
         setDrafts(result.courses);
         setWarnings(result.warnings);
-      } else {
+      } else if (lower.endsWith('.json')) {
         await restoreBackup(text);
+      } else {
+        setError('Pick a .ics calendar, .csv spreadsheet, or .json backup file.');
       }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const restoreBackupFlow = async () => {
+    reset();
+    try {
+      const picked = await pickDocument(['application/json', '*/*']);
+      if (!picked) return;
+      const text = await readTextFile(picked.uri);
+      await restoreBackup(text);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -104,7 +145,6 @@ export default function ImportScreen() {
 
   const scanScreenshot = async () => {
     reset();
-    setScanSummary(null);
     try {
       const picked = await pickDocument(['image/*']);
       if (!picked) return;
@@ -115,54 +155,123 @@ export default function ImportScreen() {
         setError(result.error ?? 'Could not read that screenshot.');
         return;
       }
-      // Parse immediately so the user sees results without extra taps; the
-      // recognized text also lands in the editable box below for fixes.
       setPasteText(result.text);
-      setPasteOpen(true);
       const found = parseScheduleText(result.text);
-      const codes = found.courses.map((co) => co.code).join(', ');
       if (found.courses.length > 0) {
-        const semStart = normalizeDate(pasteSemStart);
-        const semEnd = normalizeDate(pasteSemEnd);
-        if (semStart && semEnd) {
-          // Dates already entered: go straight to the import preview.
-          runParse(result.text);
-        } else {
-          setWarnings([
-            'Enter the semester start and end dates below, then tap "Parse pasted text" to preview and import.',
-            ...found.warnings.filter((w) => !w.startsWith('No course codes')),
-          ]);
-        }
-        // Set after runParse — it calls reset(), which clears the summary.
-        setScanSummary(
-          `Found ${found.courses.length} course${found.courses.length === 1 ? '' : 's'}: ${codes}.`,
-        );
+        setModalError(null);
+        setScanModal({ codes: found.courses.map((co) => co.code), text: result.text });
       } else {
+        setPasteOpen(true);
         setWarnings([
           'Screenshot was read, but no course codes were recognized. Check the text below for OCR mistakes, fix them, and parse again.',
         ]);
+        setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
       }
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     } catch (e) {
       setOcrProgress(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const runParse = (text: string) => {
-    reset();
-    const semStart = normalizeDate(pasteSemStart);
-    const semEnd = normalizeDate(pasteSemEnd);
-    if (!semStart || !semEnd) {
-      setError('Enter the semester start and end dates (like 2026-08-31) so class sessions can be generated.');
-      return;
-    }
+  const buildDraftsFrom = (text: string, dates: { start: string; end: string }) => {
     const result = parseScheduleText(text);
-    setWarnings([...result.warnings, ...result.partial.map((p) => `Needs manual entry: ${p.split('\n')[0]}`)]);
-    setDrafts(result.courses.map((co) => ({ ...co, semesterStart: semStart, semesterEnd: semEnd })));
+    return {
+      drafts: result.courses.map((co) => ({ ...co, semesterStart: dates.start, semesterEnd: dates.end })),
+      warnings: [...result.warnings, ...result.partial.map((p) => `Needs manual entry: ${p.split('\n')[0]}`)],
+    };
   };
 
-  const parsePasted = () => runParse(pasteText);
+  const runParse = (text: string) => {
+    reset();
+    const dates = resolveSemesterDates();
+    if (!dates) {
+      setError(
+        semesterId === 'custom'
+          ? 'Enter valid custom start and end dates (like 2026-08-31).'
+          : 'Pick which summer session this is first.',
+      );
+      return;
+    }
+    const built = buildDraftsFrom(text, dates);
+    setWarnings(built.warnings);
+    setDrafts(built.drafts);
+  };
+
+  const importDrafts = async (draftsArg: Draft[], eventsArg: CalendarEventDraft[]) => {
+    if (!db) return 0;
+    let imported = 0;
+    for (const draft of draftsArg) {
+      const course: Course = {
+        id: makeId(),
+        code: draft.code || `COURSE${imported + 1}`,
+        name: draft.name || draft.code,
+        professor: draft.professor,
+        semesterStart: draft.semesterStart,
+        semesterEnd: draft.semesterEnd,
+        attendancePolicy: draft.attendancePolicy,
+        walkingBufferMin: draft.walkingBufferMin,
+        createdAt: new Date().toISOString(),
+      };
+      const patternRows: MeetingPattern[] = draft.patterns.map((p) => ({
+        id: makeId(),
+        courseId: course.id,
+        label: p.label,
+        building: p.building,
+        room: p.room,
+        meetingDays: p.meetingDays,
+        startTime: p.startTime,
+        endTime: p.endTime,
+      }));
+      await coursesRepo.upsert(db, course);
+      await patternsRepo.insertMany(db, patternRows);
+      await sessionsRepo.insertMany(db, generateSessions(course, patternRows, makeId));
+      imported++;
+    }
+    if (eventsArg.length > 0) await eventsRepo.insertMany(db, eventsArg);
+    bump();
+    await rescheduleNotifications();
+    return imported;
+  };
+
+  /** One-tap import from the scan popup: parse + import everything. */
+  const importFromScan = async () => {
+    if (!scanModal) return;
+    const dates = resolveSemesterDates();
+    if (!dates) {
+      setModalError(
+        semesterId === 'custom'
+          ? 'Enter valid custom start and end dates.'
+          : 'Pick which summer session this is.',
+      );
+      return;
+    }
+    setImporting(true);
+    try {
+      const built = buildDraftsFrom(scanModal.text, dates);
+      const count = await importDrafts(built.drafts, []);
+      setScanModal(null);
+      reset();
+      setWarnings(built.warnings);
+      setDone(`Imported ${count} course${count === 1 ? '' : 's'}. Reminders re-scheduled.`);
+    } catch (e) {
+      setModalError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const confirmImport = async () => {
+    try {
+      const count = await importDrafts(drafts, events);
+      setDrafts([]);
+      setEvents([]);
+      setDone(
+        `Imported ${count} course${count === 1 ? '' : 's'}${events.length ? ` and ${events.length} calendar event(s)` : ''}. Reminders re-scheduled.`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   const restoreBackup = async (text: string) => {
     if (!db) return;
@@ -186,60 +295,65 @@ export default function ImportScreen() {
     setDone(`Restored ${doc.courses.length} courses, ${doc.sessions.length} sessions, ${doc.plans.length} plans.`);
   };
 
-  const confirmImport = async () => {
-    if (!db) return;
-    try {
-      let imported = 0;
-      for (const draft of drafts) {
-        const course: Course = {
-          id: makeId(),
-          code: draft.code || `COURSE${imported + 1}`,
-          name: draft.name || draft.code,
-          professor: draft.professor,
-          semesterStart: draft.semesterStart,
-          semesterEnd: draft.semesterEnd,
-          attendancePolicy: draft.attendancePolicy,
-          walkingBufferMin: draft.walkingBufferMin,
-          createdAt: new Date().toISOString(),
-        };
-        const patternRows: MeetingPattern[] = draft.patterns.map((p) => ({
-          id: makeId(),
-          courseId: course.id,
-          label: p.label,
-          building: p.building,
-          room: p.room,
-          meetingDays: p.meetingDays,
-          startTime: p.startTime,
-          endTime: p.endTime,
-        }));
-        await coursesRepo.upsert(db, course);
-        await patternsRepo.insertMany(db, patternRows);
-        await sessionsRepo.insertMany(db, generateSessions(course, patternRows, makeId));
-        imported++;
-      }
-      if (events.length > 0) await eventsRepo.insertMany(db, events);
-      bump();
-      await rescheduleNotifications();
-      setDrafts([]);
-      setEvents([]);
-      setDone(
-        `Imported ${imported} course${imported === 1 ? '' : 's'}${events.length ? ` and ${events.length} calendar event(s)` : ''}. Reminders re-scheduled.`,
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  };
+  const semesterPicker = (
+    <View>
+      <Body secondary style={{ fontSize: 13, marginBottom: 6 }}>
+        Which semester is this?
+      </Body>
+      <Row style={{ flexWrap: 'wrap', marginBottom: 4 }}>
+        {SEMESTER_PRESETS.map((s) => (
+          <View key={s.id} style={{ minWidth: 105, flex: 1 }}>
+            <Button
+              label={s.label}
+              compact
+              kind={semesterId === s.id ? 'primary' : 'secondary'}
+              onPress={() => {
+                setSemesterId(s.id);
+                setSummerSessionId(null);
+              }}
+            />
+          </View>
+        ))}
+        <View style={{ minWidth: 105, flex: 1 }}>
+          <Button
+            label="Custom dates"
+            compact
+            kind={semesterId === 'custom' ? 'primary' : 'secondary'}
+            onPress={() => setSemesterId('custom')}
+          />
+        </View>
+      </Row>
+      {SEMESTER_PRESETS.find((s) => s.id === semesterId)?.sessions ? (
+        <Row style={{ flexWrap: 'wrap', marginBottom: 4 }}>
+          {SEMESTER_PRESETS.find((s) => s.id === semesterId)!.sessions!.map((session) => (
+            <View key={session.id} style={{ minWidth: 150, flex: 1 }}>
+              <Button
+                label={session.label}
+                compact
+                kind={summerSessionId === session.id ? 'primary' : 'secondary'}
+                onPress={() => setSummerSessionId(session.id)}
+              />
+            </View>
+          ))}
+        </Row>
+      ) : null}
+      {semesterId === 'custom' ? (
+        <Row>
+          <View style={{ flex: 1 }}>
+            <Field label="Start" value={customStart} onChangeText={setCustomStart} placeholder="2026-08-31" autoCapitalize="none" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Field label="End" value={customEnd} onChangeText={setCustomEnd} placeholder="2026-12-11" autoCapitalize="none" />
+          </View>
+        </Row>
+      ) : null}
+    </View>
+  );
 
   return (
     <Screen>
       <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: 64 }}>
         {error ? <ErrorBox message={error} /> : null}
-        {scanSummary ? (
-          <Card>
-            <Badge label="Screenshot read" tone="success" />
-            <Body style={{ marginTop: 6 }}>{scanSummary}</Body>
-          </Card>
-        ) : null}
         {done ? (
           <Card>
             <Badge label="Success" tone="success" />
@@ -248,62 +362,47 @@ export default function ImportScreen() {
           </Card>
         ) : null}
 
-        <Subtitle>Pick a source</Subtitle>
+        {OCR_AVAILABLE ? (
+          <Card>
+            <Button
+              label={ocrProgress != null ? `Reading screenshot… ${ocrProgress}%` : 'Scan a schedule screenshot'}
+              icon="scan-outline"
+              disabled={ocrProgress != null}
+              onPress={scanScreenshot}
+            />
+            <Body secondary style={{ fontSize: 13 }}>
+              Testudo screenshot in, courses out — read entirely on your device.
+            </Body>
+          </Card>
+        ) : null}
+
         <Card>
-          <Button label="Calendar file (.ics)" kind="secondary" onPress={() => pickAndParse('ics')} />
+          <Button
+            label="Paste schedule text"
+            kind={OCR_AVAILABLE ? 'secondary' : 'primary'}
+            icon="clipboard-outline"
+            onPress={() => setPasteOpen(!pasteOpen)}
+          />
           <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
-            Export from Testudo/Google Calendar. Weekly classes become courses; one-off exam/due
-            events land on the dashboard.
+            Long-press a screenshot → copy text (Live Text / Lens) → paste here.
           </Body>
-          <Button label="Spreadsheet (.csv)" kind="secondary" onPress={() => pickAndParse('csv')} />
-          <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
-            Columns: code, name, professor, component, building, room, days, start, end,
-            semester_start, semester_end, attendance_policy, walking_buffer. Give a course&apos;s
-            Lecture and Discussion/Lab their own rows sharing the same code, distinguished by
-            &quot;component&quot;.
+          <Button label="Calendar or CSV file" kind="secondary" icon="document-outline" onPress={pickAndParseFile} />
+          <Body secondary style={{ fontSize: 13 }}>
+            .ics from Testudo/Google Calendar, or a spreadsheet export.
           </Body>
-          {OCR_AVAILABLE ? (
-            <>
-              <Button
-                label={ocrProgress != null ? `Reading screenshot… ${ocrProgress}%` : 'Scan a schedule screenshot'}
-                kind="secondary"
-                icon="scan-outline"
-                disabled={ocrProgress != null}
-                onPress={scanScreenshot}
-              />
-              <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
-                Pick a Testudo screenshot and the text is read right here in your browser — the
-                image never leaves your device. First use downloads the recognition engine
-                (~5 MB, cached afterward).
-              </Body>
-            </>
-          ) : null}
-          <Button label="Paste text from a schedule screenshot" kind="secondary" onPress={() => setPasteOpen(!pasteOpen)} />
-          <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
-            Long-press your schedule screenshot → copy the text (Live Text / Lens) → paste here. No
-            AI needed.
-          </Body>
-          <Button label="Restore JSON backup" kind="secondary" onPress={() => pickAndParse('backup')} />
         </Card>
 
         {pasteOpen ? (
           <Card>
             <Field
-              label="Pasted schedule text"
+              label="Schedule text"
               value={pasteText}
               onChangeText={setPasteText}
               multiline
-              placeholder={'CMSC216 Intro to Computer Systems\nMWF 10:00-10:50\nIRB 0324\n…'}
+              placeholder={'COMM 107 (9601)\nLec TTh 12:30pm - 1:45pm EST SKN 1112\n…'}
             />
-            <Row>
-              <View style={{ flex: 1 }}>
-                <Field label="Semester start" value={pasteSemStart} onChangeText={setPasteSemStart} placeholder="2026-08-31" autoCapitalize="none" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Field label="Semester end" value={pasteSemEnd} onChangeText={setPasteSemEnd} placeholder="2026-12-14" autoCapitalize="none" />
-              </View>
-            </Row>
-            <Button label="Parse pasted text" onPress={parsePasted} disabled={!pasteText.trim()} />
+            {semesterPicker}
+            <Button label="Parse text" onPress={() => runParse(pasteText)} disabled={!pasteText.trim()} />
           </Card>
         ) : null}
 
@@ -312,7 +411,7 @@ export default function ImportScreen() {
             <Subtitle>Heads up</Subtitle>
             {warnings.map((w, i) => (
               <Body key={i} secondary style={{ fontSize: 13, marginBottom: 4 }}>
-                ⚠ {w}
+                {w}
               </Body>
             ))}
           </Card>
@@ -347,7 +446,59 @@ export default function ImportScreen() {
             <Button label="Discard" kind="ghost" onPress={reset} />
           </>
         ) : null}
+
+        <Row style={{ justifyContent: 'center', marginTop: 8 }}>
+          <TextLink label="Restore JSON backup" icon="archive-outline" onPress={restoreBackupFlow} />
+        </Row>
       </ScrollView>
+
+      {/* Post-scan popup: pick the semester, import everything in one tap. */}
+      <Modal visible={scanModal != null} transparent animationType="fade" onRequestClose={() => setScanModal(null)}>
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.45)',
+            justifyContent: 'center',
+            padding: 20,
+          }}>
+          <Card style={{ maxHeight: '85%' }}>
+            <ScrollView>
+              <Badge label="Screenshot read" tone="success" />
+              <Body style={{ fontFamily: FONT.bold, fontSize: 17, marginTop: 8 }}>
+                Found {scanModal?.codes.length} course{scanModal?.codes.length === 1 ? '' : 's'}
+              </Body>
+              <Body secondary style={{ marginBottom: 10 }}>
+                {scanModal?.codes.join(', ')}
+              </Body>
+              {modalError ? <ErrorBox message={modalError} /> : null}
+              {semesterPicker}
+              <Button
+                label={importing ? 'Importing…' : `Import all ${scanModal?.codes.length ?? 0}`}
+                icon="checkmark"
+                disabled={importing}
+                onPress={importFromScan}
+              />
+              <Row>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="Review text first"
+                    kind="secondary"
+                    compact
+                    onPress={() => {
+                      setScanModal(null);
+                      setPasteOpen(true);
+                      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button label="Cancel" kind="ghost" compact onPress={() => setScanModal(null)} />
+                </View>
+              </Row>
+            </ScrollView>
+          </Card>
+        </View>
+      </Modal>
     </Screen>
   );
 }
