@@ -2,7 +2,7 @@
 
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Linking, Platform, ScrollView, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import {
   Body,
@@ -10,6 +10,7 @@ import {
   Card,
   ErrorBox,
   Field,
+  Icon,
   Row,
   Screen,
   Subtitle,
@@ -168,31 +169,46 @@ export default function BuildingsScreen() {
             <View key={loc.id}>{form}</View>
           ) : (
             <Card key={loc.id} style={{ paddingVertical: 12 }}>
-              <Row style={{ justifyContent: 'space-between' }}>
-                <View style={{ flex: 1 }}>
-                  <Body style={{ fontFamily: FONT.bold }}>
-                    {loc.name} {loc.abbreviation ? `(${loc.abbreviation})` : ''}
-                  </Body>
-                  {loc.entranceNotes ? <Body secondary>{loc.entranceNotes}</Body> : null}
-                  <Body secondary style={{ fontSize: 12 }}>
-                    {loc.walkOverrideMin != null
-                      ? `Manual: ${loc.walkOverrideMin} min`
-                      : loc.lat != null
-                        ? `${loc.lat.toFixed(4)}, ${loc.lon?.toFixed(4)}`
-                        : 'No coordinates set'}
-                  </Body>
-                </View>
-                <Row>
+              {/* Name centered across the top, actions beneath it, then the
+                  description gets the full card width. */}
+              <Body style={{ fontFamily: FONT.bold, fontSize: 16, textAlign: 'center' }}>
+                {loc.name} {loc.abbreviation ? `(${loc.abbreviation})` : ''}
+              </Body>
+              <Row style={{ justifyContent: 'center', marginTop: 8, marginBottom: 4 }}>
+                <View style={{ flex: 1, maxWidth: 150 }}>
                   <Button
                     label="Directions"
-                    kind="secondary"
+                    kind="tonal"
                     compact
+                    icon="navigate-outline"
                     onPress={() => Linking.openURL(bestMapUrl(loc, loc.name, Platform.OS === 'ios'))}
                   />
-                  <Button label="Edit" kind="secondary" compact onPress={() => startEdit(loc)} />
-                  <Button label="Remove" icon="trash-outline" kind="ghost" compact onPress={() => remove(loc.id)} />
-                </Row>
+                </View>
+                <View style={{ flex: 1, maxWidth: 150 }}>
+                  <Button label="Edit" kind="secondary" compact icon="create-outline" onPress={() => startEdit(loc)} />
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${loc.name}`}
+                  onPress={() => remove(loc.id)}
+                  hitSlop={6}
+                  style={({ pressed }) => ({ padding: 8, opacity: pressed ? 0.5 : 1 })}>
+                  <Icon name="trash-outline" size={17} />
+                </Pressable>
               </Row>
+              {loc.entranceNotes ? <Body secondary>{loc.entranceNotes}</Body> : null}
+              {loc.roomNotes ? (
+                <Body secondary style={{ fontSize: 13 }}>
+                  {loc.roomNotes}
+                </Body>
+              ) : null}
+              <Body secondary style={{ fontSize: 12, marginTop: 4 }}>
+                {loc.walkOverrideMin != null
+                  ? `Manual walk time: ${loc.walkOverrideMin} min`
+                  : loc.lat != null
+                    ? `${loc.lat.toFixed(4)}, ${loc.lon?.toFixed(4)}`
+                    : 'No coordinates set'}
+              </Body>
             </Card>
           ),
         )}
