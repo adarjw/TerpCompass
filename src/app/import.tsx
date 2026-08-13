@@ -50,12 +50,13 @@ import { pickDocument, pickDocuments, readTextFile, validateImportedFile } from 
 import { OCR_AVAILABLE, ocrImage } from '@/services/ocr';
 import { fetchEnrichment } from '@/services/planetterp';
 import { fetchSectionProfessor } from '@/services/umdio';
+import { enableWebPush, isPushSupported } from '@/services/webpush';
 import { useApp } from '@/state/AppContext';
 
 type Draft = CourseDraft & { attendancePolicy?: string; walkingBufferMin?: number };
 
 export default function ImportScreen() {
-  const { db, bump, rescheduleNotifications } = useApp();
+  const { db, bump, rescheduleNotifications, settings, saveSettings } = useApp();
   const c = useColors();
   const [error, setError] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -66,6 +67,32 @@ export default function ImportScreen() {
   const [done, setDone] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState<string | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  // Post-import nudge: offer push reminders right when they're most useful.
+  const [notifModal, setNotifModal] = useState(false);
+  const [notifBusy, setNotifBusy] = useState(false);
+  const [notifError, setNotifError] = useState<string | null>(null);
+
+  const maybeOfferNotifications = () => {
+    if (isPushSupported() && !settings.webPushEnabled) setNotifModal(true);
+  };
+
+  const acceptNotifications = async () => {
+    setNotifBusy(true);
+    setNotifError(null);
+    try {
+      const result = await enableWebPush();
+      if (!result.ok) {
+        setNotifError(result.error);
+        return;
+      }
+      await saveSettings({ ...settings, webPushEnabled: true });
+      await rescheduleNotifications(); // syncs the fresh schedule to the relay
+      setNotifModal(false);
+    } finally {
+      setNotifBusy(false);
+    }
+  };
   const scrollRef = useRef<ScrollView>(null);
 
   // Semester selection (shared by the scan popup and the paste flow).
@@ -308,6 +335,7 @@ export default function ImportScreen() {
       reset();
       setWarnings(built.warnings);
       setDone(`Imported ${imported.length} course${imported.length === 1 ? '' : 's'}.${ptNote}`);
+      if (imported.length > 0) maybeOfferNotifications();
     } catch (e) {
       setModalError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -324,6 +352,7 @@ export default function ImportScreen() {
       setDone(
         `Imported ${imported.length} course${imported.length === 1 ? '' : 's'}${events.length ? ` and ${events.length} calendar event(s)` : ''}. Reminders re-scheduled.`,
       );
+      if (imported.length > 0) maybeOfferNotifications();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -507,6 +536,31 @@ export default function ImportScreen() {
           <TextLink label="Restore JSON backup" icon="archive-outline" onPress={restoreBackupFlow} />
         </Row>
       </ScrollView>
+
+      {/* Post-import nudge: enable push reminders while it's top of mind. */}
+      <Modal visible={notifModal} transparent animationType="fade" onRequestClose={() => setNotifModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 }}>
+          <Card>
+            <Row style={{ gap: 8, marginBottom: 4 }}>
+              <Icon name="notifications-outline" size={20} color={c.accent} />
+              <Body style={{ fontFamily: FONT.bold, fontSize: 17 }}>Get class reminders?</Body>
+            </Row>
+            <Body secondary style={{ fontSize: 13.5, lineHeight: 19, marginBottom: 8 }}>
+              A heads-up before each class and a &ldquo;leave now&rdquo; timed to your walk — even
+              while the app is closed. Only your pending reminders are stored, each deleted once
+              sent. You can turn this off anytime in Settings.
+            </Body>
+            {notifError ? <ErrorBox message={notifError} /> : null}
+            <Button
+              label={notifBusy ? 'Enabling…' : 'Enable reminders'}
+              icon="notifications-outline"
+              disabled={notifBusy}
+              onPress={acceptNotifications}
+            />
+            <Button label="Not now" kind="ghost" onPress={() => setNotifModal(false)} />
+          </Card>
+        </View>
+      </Modal>
 
       {/* Pre-scan tutorial: what a good screenshot looks like. */}
       <Modal visible={tutorialOpen} transparent animationType="fade" onRequestClose={() => setTutorialOpen(false)}>
