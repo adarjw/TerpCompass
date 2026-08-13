@@ -514,19 +514,22 @@ export default function ImportScreen() {
           <Card style={{ maxHeight: '88%' }}>
             <ScrollView>
               <Body style={{ fontFamily: FONT.bold, fontSize: 17 }}>Screenshot your Testudo schedule</Body>
-              <Body secondary style={{ fontSize: 13.5, marginTop: 6 }}>
-                1. On Testudo, open <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Student Schedule</Body>.{'\n'}
-                2. Tap the arrow on each course to expand it — that reveals the full course name and
-                professor so the app can import them too.{'\n'}
-                3. Screenshot the whole list (up to 3 screenshots if it&apos;s long — select them all
-                at once). It should look like this:
+              <Body secondary style={{ fontSize: 13.5, lineHeight: 19, marginTop: 4 }}>
+                On Testudo → <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Student Schedule</Body>,
+                tap the arrow on each course (reveals its name + professor), then screenshot the list —
+                up to 3 screenshots, selected together:
               </Body>
-              <Image
-                source={require('../../assets/scan-example.png')}
-                accessibilityLabel="Example Testudo schedule screenshot with each course expanded"
-                style={{ width: '100%', aspectRatio: 720 / 1000, borderRadius: 8, marginVertical: 10 }}
-                resizeMode="contain"
-              />
+              {/* RN-web ignores aspectRatio on Image (falls back to the file's
+                  intrinsic height, leaving letterbox gaps) — size a View and
+                  let the image fill it. */}
+              <View style={{ width: '100%', aspectRatio: 720 / 600, marginVertical: 8 }}>
+                <Image
+                  source={require('../../assets/scan-example.png')}
+                  accessibilityLabel="Example Testudo schedule screenshot with each course expanded"
+                  style={{ width: '100%', height: '100%', borderRadius: 8 }}
+                  resizeMode="contain"
+                />
+              </View>
               <Button label="Choose screenshots" icon="images-outline" onPress={() => { setTutorialOpen(false); scanScreenshot(); }} />
               <Button label="Cancel" kind="ghost" onPress={() => setTutorialOpen(false)} />
             </ScrollView>
