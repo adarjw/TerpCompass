@@ -93,7 +93,7 @@ export default function CourseScreen() {
     setEnrichBusy(true);
     setEnrichNote(null);
     try {
-      const result = await fetchEnrichment(course.code, course.professor);
+      const result = await fetchEnrichment(course.code, course.professor, course.semesterStart);
       if (!result.ok) {
         setEnrichNote(result.error);
         return;
@@ -271,18 +271,46 @@ export default function CourseScreen() {
                   <Badge key={name} label={`${name}: ${rating}/5`} tone={rating >= 3.5 ? 'success' : rating < 2.5 ? 'warning' : 'neutral'} />
                 ))}
               </Row>
-              {!course.professor && enrich.professors.length > 0 ? (
+              {!course.professor && (enrich.professors.length > 0 || (enrich.currentInstructors ?? []).length > 0) ? (
                 <>
                   <Body secondary style={{ fontSize: 13, marginBottom: 4 }}>
                     Set the professor (improves review matching):
                   </Body>
-                  <Row style={{ flexWrap: 'wrap', marginBottom: 6 }}>
-                    {enrich.professors.slice(0, 4).map((name) => (
-                      <View key={name} style={{ minWidth: 120 }}>
-                        <Button label={name} kind="secondary" compact onPress={() => setProfessor(name)} />
-                      </View>
-                    ))}
-                  </Row>
+                  {(() => {
+                    // Teaching-this-term names first (umd.io Schedule of
+                    // Classes), then PlanetTerp's historical roster.
+                    // Older cache entries predate currentInstructors.
+                    const current = enrich.currentInstructors ?? [];
+                    const currentKeys = new Set(current.map((n) => n.toLowerCase()));
+                    const historical = enrich.professors.filter((n) => !currentKeys.has(n.toLowerCase()));
+                    return (
+                      <>
+                        {current.length > 0 ? (
+                          <>
+                            <Body secondary style={{ fontSize: 12, marginBottom: 2 }}>
+                              Teaching this semester or recently:
+                            </Body>
+                            <Row style={{ flexWrap: 'wrap', marginBottom: 6 }}>
+                              {current.map((name) => (
+                                <View key={name} style={{ minWidth: 120 }}>
+                                  <Button label={name} kind="tonal" compact onPress={() => setProfessor(name)} />
+                                </View>
+                              ))}
+                            </Row>
+                          </>
+                        ) : null}
+                        {historical.length > 0 ? (
+                          <Row style={{ flexWrap: 'wrap', marginBottom: 6 }}>
+                            {historical.slice(0, current.length > 0 ? 3 : 6).map((name) => (
+                              <View key={name} style={{ minWidth: 120 }}>
+                                <Button label={name} kind="secondary" compact onPress={() => setProfessor(name)} />
+                              </View>
+                            ))}
+                          </Row>
+                        ) : null}
+                      </>
+                    );
+                  })()}
                 </>
               ) : null}
               {enrich.hints.length > 0 ? (

@@ -9,6 +9,7 @@
  */
 
 import { extractAttendanceHints, summarizePolicyFromHints, type AttendanceHint, type PTReview } from '../lib/planetterpHints';
+import { fetchRecentInstructors } from './umdio';
 
 const BASE = 'https://planetterp.com/api/v1';
 
@@ -18,6 +19,12 @@ export interface PlanetTerpEnrichment {
   description: string | null;
   averageGpa: number | null;
   professors: string[];
+  /**
+   * Who actually teaches the course in its own term and the few terms
+   * before it (from umd.io's Schedule of Classes), newest term first.
+   * Empty when the course's semester wasn't known or umd.io was down.
+   */
+  currentInstructors: string[];
   /** Ratings for professors whose reviews were fetched. */
   professorRatings: Record<string, number>;
   hints: AttendanceHint[];
@@ -37,11 +44,15 @@ async function getJson(path: string): Promise<unknown> {
 /**
  * Fetch course info + reviews and mine attendance hints.
  * `preferredProfessor` (the course's saved professor, if any) is fetched
- * first; otherwise the first few professors PlanetTerp lists for the course.
+ * first; otherwise professors teaching in recent terms (umd.io), then the
+ * first few PlanetTerp lists for the course.
+ * `semesterStart` (the course's start date) enables the umd.io lookup of
+ * who teaches that term and the few terms before it.
  */
 export async function fetchEnrichment(
   courseCode: string,
   preferredProfessor?: string,
+  semesterStart?: string,
 ): Promise<EnrichResult> {
   const code = courseCode.toUpperCase().replace(/\s+/g, '');
   try {
@@ -52,7 +63,19 @@ export async function fetchEnrichment(
       professors?: string[];
     };
 
-    const professors = Array.isArray(course.professors) ? course.professors : [];
+    // Dedupe PlanetTerp's roster (it repeats names across terms).
+    const professors: string[] = [];
+    const rosterSeen = new Set<string>();
+    for (const name of Array.isArray(course.professors) ? course.professors : []) {
+      const key = name.trim().toLowerCase();
+      if (!key || rosterSeen.has(key)) continue;
+      rosterSeen.add(key);
+      professors.push(name.trim());
+    }
+
+    const currentInstructors = semesterStart
+      ? await fetchRecentInstructors(code, semesterStart)
+      : [];
 
     const reviews: PTReview[] = [];
     const professorRatings: Record<string, number> = {};
@@ -87,10 +110,10 @@ export async function fetchEnrichment(
       const wanted = preferredProfessor.trim().toLowerCase().replace(/^prof\.?\s*/i, '');
       await fetchProfessor(professors.find((p) => p.toLowerCase().includes(wanted)) ?? wanted);
     }
-    // …then fall back to the course's actual roster if that yielded nothing
-    // (saved name may be a nickname, TA, or not on PlanetTerp at all).
+    // …then whoever actually teaches it in recent terms, then the general
+    // roster (saved name may be a nickname, TA, or not on PlanetTerp).
     if (reviews.length === 0) {
-      for (const name of professors.slice(0, 3)) {
+      for (const name of [...currentInstructors, ...professors].slice(0, 3)) {
         await fetchProfessor(name);
       }
     }
@@ -104,6 +127,7 @@ export async function fetchEnrichment(
         description: course.description ?? null,
         averageGpa: typeof course.average_gpa === 'number' ? Math.round(course.average_gpa * 100) / 100 : null,
         professors,
+        currentInstructors,
         professorRatings,
         hints,
         policySuggestion: summarizePolicyFromHints(hints),

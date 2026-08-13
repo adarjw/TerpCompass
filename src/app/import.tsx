@@ -249,7 +249,7 @@ export default function ImportScreen() {
     for (let i = 0; i < imported.length; i++) {
       const course = imported[i];
       setImportStatus(`Fetching PlanetTerp info… ${i + 1}/${imported.length} (${course.code})`);
-      const result = await fetchEnrichment(course.code, course.professor);
+      const result = await fetchEnrichment(course.code, course.professor, course.semesterStart);
       if (!result.ok) continue;
       await planetTerpCacheRepo.set(db, course.code, result.value);
       if (result.value.title && course.name.trim() === course.code) {

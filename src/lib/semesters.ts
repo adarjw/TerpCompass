@@ -47,6 +47,51 @@ export const SEMESTER_PRESETS: SemesterPreset[] = [
 ];
 
 /**
+ * Testudo/umd.io term code for the semester containing a course start date:
+ * YYYY01 spring, YYYY05 summer, YYYY08 fall, and YYYY12 for the winter
+ * session (which starts in January but is coded under the previous year —
+ * winter 2027 is 202612).
+ */
+export function umdTermCode(startISO: string): string {
+  const m = startISO.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  if (month === 1) return day <= 23 ? `${year - 1}12` : `${year}01`;
+  if (month <= 5) return `${year}01`;
+  if (month <= 7) return `${year}05`;
+  return `${year}08`;
+}
+
+/**
+ * The term itself plus the previous `count` fall/spring terms, newest first.
+ * Winter/summer codes map onto the surrounding majors (few instructors teach
+ * only then, and each extra term is another network call).
+ */
+export function recentTermCodes(startISO: string, count = 3): string[] {
+  const own = umdTermCode(startISO);
+  if (!own) return [];
+  let year = Number(own.slice(0, 4));
+  let month = own.slice(4);
+  // Normalize winter/summer onto the nearest major term at or before them.
+  if (month === '12') month = '08';
+  if (month === '05') month = '01';
+  const out = [own];
+  for (let i = 0; i < count; i++) {
+    if (month === '08') {
+      month = '01';
+    } else {
+      month = '08';
+      year -= 1;
+    }
+    const code = `${year}${month}`;
+    if (!out.includes(code)) out.push(code);
+  }
+  return out;
+}
+
+/**
  * Default selection: the semester containing today, else the next upcoming
  * one, else the last listed.
  */
