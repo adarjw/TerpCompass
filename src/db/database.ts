@@ -104,6 +104,29 @@ export async function migrate(db: SqlExecutor): Promise<void> {
   }
 }
 
+/**
+ * "Start over": deletes every course and everything hanging off it
+ * (sessions, absences, plans, notes, resources, cached PlanetTerp data,
+ * calendar events) but keeps settings, campus buildings, and timed walks.
+ */
+export async function wipeScheduleData(): Promise<void> {
+  const db = await getDb();
+  await db.execAsync(`
+    DELETE FROM notifications;
+    DELETE FROM catch_up_tasks;
+    DELETE FROM catch_up_plans;
+    DELETE FROM extracted_resource_chunks;
+    DELETE FROM resources;
+    DELETE FROM absences;
+    DELETE FROM class_notes;
+    DELETE FROM class_sessions;
+    DELETE FROM meeting_patterns;
+    DELETE FROM calendar_events;
+    DELETE FROM courses;
+    DELETE FROM planetterp_cache;
+  `);
+}
+
 /** "Delete all local data": drops every row, keeps the schema. */
 export async function wipeAllData(): Promise<void> {
   const db = await getDb();

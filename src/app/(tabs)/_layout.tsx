@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import React from 'react';
-import { Platform, type ColorValue } from 'react-native';
+import { Platform, Pressable, type ColorValue } from 'react-native';
 
 import { FONT, Palette } from '@/components/ui';
 import { useApp } from '@/state/AppContext';
@@ -43,7 +43,27 @@ export default function TabsLayout() {
         headerShadowVisible: false,
         headerTitleStyle: { color: c.text, fontFamily: FONT.bold, fontSize: 17 },
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Now', tabBarIcon: icon('compass', 'compass-outline') }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Now',
+          tabBarIcon: icon('compass', 'compass-outline'),
+          headerRight: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Features"
+              onPress={() => router.push('/features')}
+              hitSlop={8}
+              style={({ pressed }) => ({
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                opacity: pressed ? 0.5 : 1,
+              })}>
+              <Ionicons name="sparkles-outline" size={21} color={c.accent} />
+            </Pressable>
+          ),
+        }}
+      />
       <Tabs.Screen
         name="schedule"
         options={{

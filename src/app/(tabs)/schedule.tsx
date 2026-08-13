@@ -30,7 +30,9 @@ import {
   TextLink,
   useColors,
 } from '@/components/ui';
+import { wipeScheduleData } from '@/db/database';
 import { coursesRepo, patternsRepo, sessionsRepo } from '@/db/repo';
+import { deleteAllSandboxFiles } from '@/services/files';
 import { sessionEnd, sessionStart, sessionsOn, whereShouldIBe } from '@/lib/sessions';
 import { addDaysISO, formatCountdown, formatTime12, parseISODate, toISODate } from '@/lib/time';
 import type { ClassSession, Course, MeetingPattern } from '@/lib/types';
@@ -66,7 +68,7 @@ function weekLabel(weekStart: string): string {
 }
 
 export default function ScheduleScreen() {
-  const { db, version } = useApp();
+  const { db, version, bump, rescheduleNotifications } = useApp();
   const c = useColors();
   const [courses, setCourses] = useState<Course[] | null>(null);
   const [sessions, setSessions] = useState<ClassSession[]>([]);
@@ -74,6 +76,15 @@ export default function ScheduleScreen() {
   const today = toISODate(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [confirmWipe, setConfirmWipe] = useState(false);
+
+  const startOver = async () => {
+    await wipeScheduleData();
+    deleteAllSandboxFiles();
+    setConfirmWipe(false);
+    bump();
+    await rescheduleNotifications();
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -397,6 +408,39 @@ export default function ScheduleScreen() {
           <TextLink label="Import" icon="download-outline" onPress={() => router.push('/import')} />
           <TextLink label="Buildings" icon="business-outline" onPress={() => router.push('/buildings')} />
         </Row>
+        {courses.length > 0 ? (
+          <>
+            {!confirmWipe ? (
+              <Row style={{ justifyContent: 'center', marginTop: 12 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setConfirmWipe(true)}
+                  style={({ pressed }) => ({ paddingVertical: 8, opacity: pressed ? 0.5 : 1 })}>
+                  <Text style={{ fontFamily: FONT.regular, fontSize: 13.5, color: c.danger }}>
+                    Delete schedule & start over…
+                  </Text>
+                </Pressable>
+              </Row>
+            ) : (
+              <Card style={{ borderColor: c.danger + '66', borderWidth: 1, marginTop: 12 }}>
+                <Body style={{ fontFamily: FONT.bold, marginBottom: 4 }}>Start over?</Body>
+                <Body secondary style={{ fontSize: 13.5, marginBottom: 8 }}>
+                  This deletes every course, class session, absence, catch-up plan, note, and
+                  attached file. Settings, campus buildings, and your timed walks are kept. This
+                  cannot be undone.
+                </Body>
+                <Row>
+                  <View style={{ flex: 1 }}>
+                    <Button label="Delete everything" kind="danger" onPress={startOver} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Button label="Keep my schedule" kind="secondary" onPress={() => setConfirmWipe(false)} />
+                  </View>
+                </Row>
+              </Card>
+            )}
+          </>
+        ) : null}
       </ScrollView>
     </Screen>
   );

@@ -230,6 +230,38 @@ export function parseScheduleText(text: string): ScheduleTextResult {
       partial.push(block.slice(0, 200));
       continue;
     }
+
+    // Location recovery: room links are right-aligned on Testudo, so OCR
+    // sometimes emits them column-wise — on their own lines, possibly after
+    // a "Final TBA" row this parser skips. Collect every building+room
+    // token in the block (in reading order), mark the ones a pattern
+    // already claimed inline, and hand the leftovers to location-less
+    // patterns in order.
+    const orphanPatterns = patterns.filter((p) => !p.building && !p.room);
+    if (orphanPatterns.length > 0) {
+      const claimed = new Set(
+        patterns.filter((p) => p.building).map((p) => `${p.building} ${p.room}`.toUpperCase()),
+      );
+      const tokens: { building: string; room: string }[] = [];
+      const locScan = new RegExp(LOCATION_RE.source, 'g');
+      let lm: RegExpExecArray | null;
+      const blockNoCode = block.replace(CODE_RE, ' ');
+      while ((lm = locScan.exec(blockNoCode)) !== null) {
+        const key = `${lm[1]} ${lm[2]}`.toUpperCase();
+        if (claimed.has(key)) {
+          claimed.delete(key); // consume one claim per inline use
+        } else {
+          tokens.push({ building: lm[1], room: lm[2] });
+        }
+      }
+      for (const pattern of orphanPatterns) {
+        const token = tokens.shift();
+        if (!token) break;
+        pattern.building = token.building;
+        pattern.room = token.room;
+      }
+    }
+
     if (anyUnparsed) {
       warnings.push(`"${code}": at least one meeting row could not be read — check it after import.`);
     }

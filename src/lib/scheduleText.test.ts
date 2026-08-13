@@ -112,4 +112,53 @@ Lec ??? garbled ###`;
     expect(result.courses).toEqual([]);
     expect(result.partial).toHaveLength(1);
   });
+
+  it('recovers a room OCR placed after the Final row (right-aligned column read)', () => {
+    // Testudo right-aligns room links; column-wise OCR can emit them on
+    // their own line after "Final TBA" — the PHYS261 bug.
+    const columnOrdered = `PHYS 261 (0201)
+This section is face-to-face
+Lab M 9:00am - 11:20am EST
+Final TBA
+PHY 3219`;
+    const result = parseScheduleText(columnOrdered);
+    expect(result.partial).toEqual([]);
+    const lab = result.courses[0].patterns[0];
+    expect(lab.label).toBe('lab');
+    expect(lab.building).toBe('PHY');
+    expect(lab.room).toBe('3219');
+  });
+
+  it('assigns column-read rooms to multiple components in order', () => {
+    const columnOrdered = `ENES 221 (0103)
+Lec MW 1:00pm - 1:50pm EST
+Dis F 1:00pm - 2:50pm EST
+Final TBA
+ATL 1113
+EGR 1202`;
+    const result = parseScheduleText(columnOrdered);
+    const lec = result.courses[0].patterns.find((p) => p.label === 'lecture')!;
+    const dis = result.courses[0].patterns.find((p) => p.label === 'discussion')!;
+    expect(lec.building).toBe('ATL');
+    expect(lec.room).toBe('1113');
+    expect(dis.building).toBe('EGR');
+    expect(dis.room).toBe('1202');
+  });
+
+  it('does not steal an inline room to fill a different component', () => {
+    // Dis has its room inline; Lec's room floated to the end. The floated
+    // token must go to Lec, not double-assign the Dis room.
+    const mixed = `MATH 246 (0241)
+Lec TTh 11:00am - 12:15pm EST
+Dis F 12:00pm - 12:50pm EST MTH 0101
+Final TBA
+ARM 0135`;
+    const result = parseScheduleText(mixed);
+    const lec = result.courses[0].patterns.find((p) => p.label === 'lecture')!;
+    const dis = result.courses[0].patterns.find((p) => p.label === 'discussion')!;
+    expect(dis.building).toBe('MTH');
+    expect(dis.room).toBe('0101');
+    expect(lec.building).toBe('ARM');
+    expect(lec.room).toBe('0135');
+  });
 });

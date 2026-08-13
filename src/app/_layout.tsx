@@ -48,6 +48,7 @@ function ThemedStack({ fontsLoaded }: { fontsLoaded: boolean }) {
         <Stack.Screen name="import" options={{ title: 'Import schedule' }} />
         <Stack.Screen name="buildings" options={{ title: 'Campus buildings' }} />
         <Stack.Screen name="email" options={{ title: 'Email / cancellation' }} />
+        <Stack.Screen name="features" options={{ title: 'What this app does' }} />
       </Stack>
     </ThemeProvider>
   );

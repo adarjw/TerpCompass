@@ -7,7 +7,7 @@
 
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
-import { Modal, ScrollView, View } from 'react-native';
+import { Modal, Pressable, ScrollView, View } from 'react-native';
 
 import {
   Badge,
@@ -17,6 +17,7 @@ import {
   ErrorBox,
   Field,
   FONT,
+  Icon,
   Row,
   Screen,
   Subtitle,
@@ -30,6 +31,7 @@ import {
   eventsRepo,
   locationsRepo,
   patternsRepo,
+  planetTerpCacheRepo,
   plansRepo,
   resourcesRepo,
   sessionsRepo,
@@ -46,6 +48,7 @@ import type { Course, MeetingPattern } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
 import { pickDocument, readTextFile, validateImportedFile } from '@/services/files';
 import { OCR_AVAILABLE, ocrImage } from '@/services/ocr';
+import { fetchEnrichment } from '@/services/planetterp';
 import { useApp } from '@/state/AppContext';
 
 type Draft = CourseDraft & { attendancePolicy?: string; walkingBufferMin?: number };
@@ -73,6 +76,8 @@ export default function ImportScreen() {
   const [scanModal, setScanModal] = useState<{ codes: string[]; text: string } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [ptFetch, setPtFetch] = useState(true);
 
   const resolveSemesterDates = (): { start: string; end: string } | null => {
     if (semesterId === 'custom') {
@@ -198,12 +203,12 @@ export default function ImportScreen() {
   };
 
   const importDrafts = async (draftsArg: Draft[], eventsArg: CalendarEventDraft[]) => {
-    if (!db) return 0;
-    let imported = 0;
+    if (!db) return [] as Course[];
+    const imported: Course[] = [];
     for (const draft of draftsArg) {
       const course: Course = {
         id: makeId(),
-        code: draft.code || `COURSE${imported + 1}`,
+        code: draft.code || `COURSE${imported.length + 1}`,
         name: draft.name || draft.code,
         professor: draft.professor,
         semesterStart: draft.semesterStart,
@@ -225,12 +230,35 @@ export default function ImportScreen() {
       await coursesRepo.upsert(db, course);
       await patternsRepo.insertMany(db, patternRows);
       await sessionsRepo.insertMany(db, generateSessions(course, patternRows, makeId));
-      imported++;
+      imported.push(course);
     }
     if (eventsArg.length > 0) await eventsRepo.insertMany(db, eventsArg);
     bump();
     await rescheduleNotifications();
     return imported;
+  };
+
+  /**
+   * Fetch PlanetTerp info for freshly imported courses: real titles fill in
+   * (screenshot imports only carry codes), and ratings/attendance hints get
+   * cached for each course page. Failures are per-course and non-fatal.
+   */
+  const enrichImported = async (imported: Course[]) => {
+    if (!db) return 0;
+    let enriched = 0;
+    for (let i = 0; i < imported.length; i++) {
+      const course = imported[i];
+      setImportStatus(`Fetching PlanetTerp info… ${i + 1}/${imported.length} (${course.code})`);
+      const result = await fetchEnrichment(course.code, course.professor);
+      if (!result.ok) continue;
+      await planetTerpCacheRepo.set(db, course.code, result.value);
+      if (result.value.title && course.name.trim() === course.code) {
+        await coursesRepo.upsert(db, { ...course, name: result.value.title });
+      }
+      enriched++;
+    }
+    if (enriched > 0) bump();
+    return enriched;
   };
 
   /** One-tap import from the scan popup: parse + import everything. */
@@ -246,27 +274,37 @@ export default function ImportScreen() {
       return;
     }
     setImporting(true);
+    setImportStatus('Importing…');
     try {
       const built = buildDraftsFrom(scanModal.text, dates);
-      const count = await importDrafts(built.drafts, []);
+      const imported = await importDrafts(built.drafts, []);
+      let ptNote = '';
+      if (ptFetch && imported.length > 0) {
+        const enriched = await enrichImported(imported);
+        ptNote =
+          enriched > 0
+            ? ` Course names and PlanetTerp info added for ${enriched} of them.`
+            : ' PlanetTerp lookup was unavailable — you can fetch per course later.';
+      }
       setScanModal(null);
       reset();
       setWarnings(built.warnings);
-      setDone(`Imported ${count} course${count === 1 ? '' : 's'}. Reminders re-scheduled.`);
+      setDone(`Imported ${imported.length} course${imported.length === 1 ? '' : 's'}.${ptNote}`);
     } catch (e) {
       setModalError(e instanceof Error ? e.message : String(e));
     } finally {
       setImporting(false);
+      setImportStatus(null);
     }
   };
 
   const confirmImport = async () => {
     try {
-      const count = await importDrafts(drafts, events);
+      const imported = await importDrafts(drafts, events);
       setDrafts([]);
       setEvents([]);
       setDone(
-        `Imported ${count} course${count === 1 ? '' : 's'}${events.length ? ` and ${events.length} calendar event(s)` : ''}. Reminders re-scheduled.`,
+        `Imported ${imported.length} course${imported.length === 1 ? '' : 's'}${events.length ? ` and ${events.length} calendar event(s)` : ''}. Reminders re-scheduled.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -472,8 +510,25 @@ export default function ImportScreen() {
               </Body>
               {modalError ? <ErrorBox message={modalError} /> : null}
               {semesterPicker}
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: ptFetch }}
+                onPress={() => setPtFetch(!ptFetch)}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  paddingVertical: 8,
+                  opacity: pressed ? 0.6 : 1,
+                })}>
+                <Icon name={ptFetch ? 'checkbox' : 'square-outline'} size={20} color={ptFetch ? c.accent : undefined} />
+                <Body secondary style={{ flex: 1, fontSize: 13.5 }}>
+                  Also fetch PlanetTerp info — real course names, professor ratings, and what
+                  reviews say about attendance.
+                </Body>
+              </Pressable>
               <Button
-                label={importing ? 'Importing…' : `Import all ${scanModal?.codes.length ?? 0}`}
+                label={importStatus ?? `Import all ${scanModal?.codes.length ?? 0}`}
                 icon="checkmark"
                 disabled={importing}
                 onPress={importFromScan}
