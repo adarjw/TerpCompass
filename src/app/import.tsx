@@ -41,6 +41,7 @@ import { generateSessions } from '@/lib/sessions';
 import type { Course, MeetingPattern } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
 import { pickDocument, readTextFile, validateImportedFile } from '@/services/files';
+import { OCR_AVAILABLE, ocrImage } from '@/services/ocr';
 import { useApp } from '@/state/AppContext';
 
 type Draft = CourseDraft & { attendancePolicy?: string; walkingBufferMin?: number };
@@ -57,6 +58,7 @@ export default function ImportScreen() {
   const [pasteSemStart, setPasteSemStart] = useState('');
   const [pasteSemEnd, setPasteSemEnd] = useState('');
   const [done, setDone] = useState<string | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<number | null>(null);
 
   const reset = () => {
     setError(null);
@@ -93,6 +95,31 @@ export default function ImportScreen() {
         await restoreBackup(text);
       }
     } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const scanScreenshot = async () => {
+    reset();
+    try {
+      const picked = await pickDocument(['image/*']);
+      if (!picked) return;
+      setOcrProgress(0);
+      const result = await ocrImage(picked.uri, setOcrProgress);
+      setOcrProgress(null);
+      if (!result.ok) {
+        setError(result.error ?? 'Could not read that screenshot.');
+        return;
+      }
+      // Hand the recognized text to the paste flow so the user can review
+      // and correct it before anything is parsed or imported.
+      setPasteText(result.text);
+      setPasteOpen(true);
+      setWarnings([
+        'Text below was read from your screenshot — glance over it for OCR mistakes, add the semester dates, then parse.',
+      ]);
+    } catch (e) {
+      setOcrProgress(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   };
@@ -202,6 +229,22 @@ export default function ImportScreen() {
             Lecture and Discussion/Lab their own rows sharing the same code, distinguished by
             &quot;component&quot;.
           </Body>
+          {OCR_AVAILABLE ? (
+            <>
+              <Button
+                label={ocrProgress != null ? `Reading screenshot… ${ocrProgress}%` : 'Scan a schedule screenshot'}
+                kind="secondary"
+                icon="scan-outline"
+                disabled={ocrProgress != null}
+                onPress={scanScreenshot}
+              />
+              <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
+                Pick a Testudo screenshot and the text is read right here in your browser — the
+                image never leaves your device. First use downloads the recognition engine
+                (~5 MB, cached afterward).
+              </Body>
+            </>
+          ) : null}
           <Button label="Paste text from a schedule screenshot" kind="secondary" onPress={() => setPasteOpen(!pasteOpen)} />
           <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
             Long-press your schedule screenshot → copy the text (Live Text / Lens) → paste here. No
