@@ -451,7 +451,7 @@ function FocusCard({
                 </View>
                 <View style={{ flex: 1 }}>
                   <Button
-                    label="Time this route"
+                    label="Time route"
                     kind="secondary"
                     icon="stopwatch-outline"
                     onPress={() => setTimerOpen(true)}
