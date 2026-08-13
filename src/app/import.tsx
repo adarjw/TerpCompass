@@ -4,7 +4,7 @@
  */
 
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import {
@@ -59,6 +59,8 @@ export default function ImportScreen() {
   const [pasteSemEnd, setPasteSemEnd] = useState('');
   const [done, setDone] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState<number | null>(null);
+  const [scanSummary, setScanSummary] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const reset = () => {
     setError(null);
@@ -66,6 +68,7 @@ export default function ImportScreen() {
     setDrafts([]);
     setEvents([]);
     setDone(null);
+    setScanSummary(null);
   };
 
   const pickAndParse = async (kind: 'ics' | 'csv' | 'backup') => {
@@ -101,6 +104,7 @@ export default function ImportScreen() {
 
   const scanScreenshot = async () => {
     reset();
+    setScanSummary(null);
     try {
       const picked = await pickDocument(['image/*']);
       if (!picked) return;
@@ -111,20 +115,41 @@ export default function ImportScreen() {
         setError(result.error ?? 'Could not read that screenshot.');
         return;
       }
-      // Hand the recognized text to the paste flow so the user can review
-      // and correct it before anything is parsed or imported.
+      // Parse immediately so the user sees results without extra taps; the
+      // recognized text also lands in the editable box below for fixes.
       setPasteText(result.text);
       setPasteOpen(true);
-      setWarnings([
-        'Text below was read from your screenshot — glance over it for OCR mistakes, add the semester dates, then parse.',
-      ]);
+      const found = parseScheduleText(result.text);
+      const codes = found.courses.map((co) => co.code).join(', ');
+      if (found.courses.length > 0) {
+        const semStart = normalizeDate(pasteSemStart);
+        const semEnd = normalizeDate(pasteSemEnd);
+        if (semStart && semEnd) {
+          // Dates already entered: go straight to the import preview.
+          runParse(result.text);
+        } else {
+          setWarnings([
+            'Enter the semester start and end dates below, then tap "Parse pasted text" to preview and import.',
+            ...found.warnings.filter((w) => !w.startsWith('No course codes')),
+          ]);
+        }
+        // Set after runParse — it calls reset(), which clears the summary.
+        setScanSummary(
+          `Found ${found.courses.length} course${found.courses.length === 1 ? '' : 's'}: ${codes}.`,
+        );
+      } else {
+        setWarnings([
+          'Screenshot was read, but no course codes were recognized. Check the text below for OCR mistakes, fix them, and parse again.',
+        ]);
+      }
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     } catch (e) {
       setOcrProgress(null);
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const parsePasted = () => {
+  const runParse = (text: string) => {
     reset();
     const semStart = normalizeDate(pasteSemStart);
     const semEnd = normalizeDate(pasteSemEnd);
@@ -132,10 +157,12 @@ export default function ImportScreen() {
       setError('Enter the semester start and end dates (like 2026-08-31) so class sessions can be generated.');
       return;
     }
-    const result = parseScheduleText(pasteText);
+    const result = parseScheduleText(text);
     setWarnings([...result.warnings, ...result.partial.map((p) => `Needs manual entry: ${p.split('\n')[0]}`)]);
     setDrafts(result.courses.map((co) => ({ ...co, semesterStart: semStart, semesterEnd: semEnd })));
   };
+
+  const parsePasted = () => runParse(pasteText);
 
   const restoreBackup = async (text: string) => {
     if (!db) return;
@@ -205,8 +232,14 @@ export default function ImportScreen() {
 
   return (
     <Screen>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 64 }}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: 64 }}>
         {error ? <ErrorBox message={error} /> : null}
+        {scanSummary ? (
+          <Card>
+            <Badge label="Screenshot read" tone="success" />
+            <Body style={{ marginTop: 6 }}>{scanSummary}</Body>
+          </Card>
+        ) : null}
         {done ? (
           <Card>
             <Badge label="Success" tone="success" />

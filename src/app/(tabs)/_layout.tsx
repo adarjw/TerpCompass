@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import type { ColorValue } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 
 import { FONT, Palette } from '@/components/ui';
 import { useApp } from '@/state/AppContext';
@@ -13,6 +13,22 @@ function icon(active: keyof typeof Ionicons.glyphMap, inactive: keyof typeof Ion
   return TabIcon;
 }
 
+/**
+ * On web, safe-area-context can't measure the iPhone home indicator, so the
+ * bar gets an explicit height that includes env(safe-area-inset-bottom)
+ * (exposed by viewport-fit=cover in the HTML shell). RN-web passes these
+ * CSS strings through; the casts are for RN's number-typed style props.
+ * Native platforms keep react-navigation's own safe-area handling.
+ */
+const webTabBarSizing =
+  Platform.OS === 'web'
+    ? {
+        height: 'calc(60px + env(safe-area-inset-bottom, 0px))' as unknown as number,
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)' as unknown as number,
+        paddingTop: 6,
+      }
+    : {};
+
 export default function TabsLayout() {
   const { scheme } = useApp();
   const c = Palette[scheme];
@@ -21,7 +37,7 @@ export default function TabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: c.accent,
         tabBarInactiveTintColor: c.textSecondary,
-        tabBarStyle: { backgroundColor: c.card, borderTopColor: c.border },
+        tabBarStyle: { backgroundColor: c.card, borderTopColor: c.border, ...webTabBarSizing },
         tabBarLabelStyle: { fontFamily: FONT.bold, fontSize: 11 },
         headerStyle: { backgroundColor: c.card },
         headerShadowVisible: false,

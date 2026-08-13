@@ -31,6 +31,10 @@ const headExtras = [
   '<meta name="apple-mobile-web-app-status-bar-style" content="default" />',
   '<link rel="apple-touch-icon" href="/icons/terpcompass-180.png" />',
   '<link rel="manifest" href="/manifest.json" />',
+  // 100% height tracks the *largest* mobile-Safari viewport, so the tab bar
+  // ends up behind the toolbar/home indicator. dvh tracks the visible
+  // viewport dynamically and fixes the bottom of the app being clipped.
+  '<style>@supports (height: 100dvh) { html, body, #root { height: 100dvh !important; } }</style>',
 ].join('\n    ');
 
 html = html.replace('</head>', `    ${headExtras}\n  </head>`);

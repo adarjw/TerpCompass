@@ -97,7 +97,8 @@ const HEADER_ALIASES: Record<string, string[]> = {
 const DAY_TOKENS: Record<string, Weekday> = {
   sunday: 0, sun: 0, su: 0, u: 0,
   monday: 1, mon: 1, mo: 1, m: 1,
-  tuesday: 2, tues: 2, tue: 2, tu: 2,
+  // Lone "T" = Tuesday per registrar convention (Testudo writes "TTh").
+  tuesday: 2, tues: 2, tue: 2, tu: 2, t: 2,
   wednesday: 3, wed: 3, we: 3, w: 3,
   thursday: 4, thurs: 4, thu: 4, th: 4, r: 4,
   friday: 5, fri: 5, fr: 5, f: 5,

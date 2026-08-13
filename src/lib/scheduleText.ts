@@ -1,13 +1,22 @@
 /**
- * Free-text schedule parser for the "paste from a screenshot" flow.
+ * Free-text schedule parser for the "paste from a screenshot" / OCR flow.
  *
- * iOS Live Text and Android Lens can copy text straight out of a schedule
- * screenshot (Testudo, ELMS, advisor emails). This parser deterministically
- * pulls course code, meeting component (Lec/Dis/Lab/...), days, times, and
- * building/room from that pasted text — no OCR or AI needed inside the app.
- * A course block with several component rows (e.g. "Lec" + "Dis") becomes
- * one course with multiple meeting patterns. Lines it cannot parse are
- * returned as leftovers so the user can fix them manually; nothing is guessed.
+ * Input arrives two ways: text the OS copied out of a screenshot (iOS Live
+ * Text / Google Lens) or text recognized in-app by tesseract.js. Both are
+ * noisy, so parsing is structural and forgiving:
+ *
+ *  - A course block starts at a line with a course code ("COMM 107 (9601)").
+ *  - Inside a block, rows starting with Lec/Dis/Lab/Sem/Studio each become a
+ *    meeting pattern; "Final: TBA" rows are skipped (nothing to schedule).
+ *  - Component rows follow Testudo's shape: days, time range, timezone,
+ *    building+room — e.g. "Lec  TTh 12:30pm - 1:45pm EST  SKN 1112".
+ *  - Days are matched *before* the time within the row, accepting registrar
+ *    compact forms including lone letters (M, T=Tue, W, Th, F, R=Thu).
+ *  - Common OCR damage is repaired first: letter O inside times → zero,
+ *    table/border artifacts stripped.
+ *
+ * Lines that still can't be parsed are returned as `partial` so the user can
+ * fix them manually; nothing is guessed.
  */
 
 import { parseMeetingDays, normalizeTime } from './csv';
@@ -23,21 +32,79 @@ export interface ScheduleTextResult {
 
 const CODE_RE = /\b([A-Z]{4}\d{3}[A-Z]?|[A-Z]{2,4}\s?\d{3}[A-Z]?)\b/;
 const TIME_RANGE_RE =
-  /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|—|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
-const DAYS_RE = /\b((?:(?:Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)[a-z]*[,/ ]*)+|(?:M|Tu|W|Th|F|Sa|Su){2,}|MWF|TuTh|MW|WF|TR)\b/;
+  /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:-|–|—|~|to)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i;
+/**
+ * A run of day tokens: full-ish names, two-letter registrar pairs, or lone
+ * letters (M, T, W, F, R for Thursday, plus Th/Tu/Sa/Su). Matched only in
+ * the day *slot* of a component row (before the time), so a lone capital
+ * letter can't be mistaken for one elsewhere.
+ */
+const DAYS_RE =
+  /\b((?:(?:Mon|Tue|Tues|Wed|Thu|Thur|Thurs|Fri|Sat|Sun)[a-z]*[,/ ]*)+|(?:Mo|Tu|We|Th|Fr|Sa|Su|[MTWFR])+)\b/;
 const LOCATION_RE = /\b([A-Z]{2,4}|[A-Z][a-z]+(?:\s[A-Z][a-z]+){0,3})\s+(\d{4}[A-Z]?|\d{3}[A-Z]?)\b/;
 
 /** Matches a meeting-component row header, e.g. "Lec", "Dis", "Lab", "Final". */
-const COMPONENT_LINE_RE = /^\s*(lec(?:ture)?|dis(?:c(?:ussion)?)?|lab(?:oratory)?|sem(?:inar)?|studio|final)\b\.?\s*(.*)$/i;
+const COMPONENT_LINE_RE =
+  /^\s*(lec(?:ture)?|lee|dis(?:c(?:ussion)?)?|lab(?:oratory)?|sem(?:inar)?|studio|final)\b\.?:?\s*(.*)$/i;
 
 function componentLabel(word: string): MeetingComponent {
   const w = word.toLowerCase();
-  if (w.startsWith('lec')) return 'lecture';
+  if (w.startsWith('lec') || w === 'lee') return 'lecture';
   if (w.startsWith('dis')) return 'discussion';
   if (w.startsWith('lab')) return 'lab';
   if (w.startsWith('sem')) return 'seminar';
   if (w.startsWith('studio')) return 'studio';
   return 'other';
+}
+
+/**
+ * Repair common OCR damage before parsing:
+ *  - table borders / bullets / stray glyphs → spaces
+ *  - letter O standing in for zero inside times ("12:3Opm", "1O:00am")
+ *  - fancy dashes normalized happens in TIME_RANGE_RE itself
+ */
+function cleanOcrLine(line: string): string {
+  let s = line.replace(/[|©®•★»«_{}[\]]+/g, ' ');
+  // O→0 when adjacent to digits or inside a time ("1O:30", "12:3Opm").
+  s = s.replace(/(\d)[oO](?=\d|:|\s*[ap]m)/gi, '$10');
+  s = s.replace(/(:)[oO](\d)/g, '$10$2');
+  s = s.replace(/\b[oO](\d:\d{2})/g, '0$1');
+  return s.replace(/\s{2,}/g, ' ').trim();
+}
+
+/** Parse one component row's text (days, time range, location) into a pattern. */
+function parseComponentRow(label: MeetingComponent, rowText: string): PatternDraft | null {
+  const row = cleanOcrLine(rowText);
+  const timeMatch = TIME_RANGE_RE.exec(row);
+  if (!timeMatch) return null;
+  const times = resolveAmPm(timeMatch[1], timeMatch[2]);
+  if (!times) return null;
+
+  // Days come before the time in registrar layouts ("TTh 12:30pm…"), so
+  // search only that segment first; fall back to the remainder.
+  const beforeTime = row.slice(0, timeMatch.index);
+  const afterTime = row.slice(timeMatch.index + timeMatch[0].length);
+  let daysMatch = DAYS_RE.exec(beforeTime);
+  if (!daysMatch) daysMatch = DAYS_RE.exec(afterTime.replace(/\bE[SD]T\b/g, ' '));
+  const days: Weekday[] = daysMatch ? parseMeetingDays(daysMatch[1]) : [];
+  if (days.length === 0) return null;
+
+  // Location: strip timezone tokens, then look after the time first
+  // (Testudo puts the room at the end of the row).
+  const locSource = (afterTime + ' ' + beforeTime.replace(daysMatch![0], ' ')).replace(
+    /\bE[SD]T\b/g,
+    ' ',
+  );
+  const locMatch = LOCATION_RE.exec(locSource);
+
+  return {
+    label,
+    building: locMatch ? locMatch[1] : '',
+    room: locMatch ? locMatch[2] : '',
+    meetingDays: days,
+    startTime: times[0],
+    endTime: times[1],
+  };
 }
 
 /** Infer am/pm when a range like "2:00-3:15" omits both markers (classes run 7am-10pm). */
@@ -76,26 +143,6 @@ function resolveAmPm(startRaw: string, endRaw: string): [string, string] | null 
   return null;
 }
 
-/** Parse one component row's text (time range, days, location) into a pattern. */
-function parseComponentRow(label: MeetingComponent, rowText: string): PatternDraft | null {
-  const timeMatch = TIME_RANGE_RE.exec(rowText);
-  const daysMatch = DAYS_RE.exec(rowText.replace(TIME_RANGE_RE, ' '));
-  const days: Weekday[] = daysMatch ? parseMeetingDays(daysMatch[1]) : [];
-  const times = timeMatch ? resolveAmPm(timeMatch[1], timeMatch[2]) : null;
-  if (!times || days.length === 0) return null;
-
-  const rest = rowText.replace(timeMatch![0], ' ').replace(daysMatch![0], ' ');
-  const locMatch = LOCATION_RE.exec(rest);
-  return {
-    label,
-    building: locMatch ? locMatch[1] : '',
-    room: locMatch ? locMatch[2] : '',
-    meetingDays: days,
-    startTime: times[0],
-    endTime: times[1],
-  };
-}
-
 export function parseScheduleText(text: string): ScheduleTextResult {
   const warnings: string[] = [];
   const partial: string[] = [];
@@ -106,7 +153,7 @@ export function parseScheduleText(text: string): ScheduleTextResult {
   const blocks: string[] = [];
   let buf: string[] = [];
   for (const line of (text ?? '').split(/\r\n|\n|\r/)) {
-    const t = line.trim();
+    const t = cleanOcrLine(line);
     if (!t) {
       if (buf.length) blocks.push(buf.join('\n'));
       buf = [];
@@ -134,12 +181,12 @@ export function parseScheduleText(text: string): ScheduleTextResult {
       const stripped = l.replace(CODE_RE, '').replace(TIME_RANGE_RE, '').trim();
       if (
         stripped.length > 4 &&
-        !DAYS_RE.test(l) &&
         !COMPONENT_LINE_RE.test(l) &&
         !/^\d/.test(stripped) &&
-        !LOCATION_RE.test(l)
+        !LOCATION_RE.test(l) &&
+        !/section|face-to-face|online|blended/i.test(stripped)
       ) {
-        name = stripped.replace(/^[-:–]\s*/, '');
+        name = stripped.replace(/^[-:–(]\s*/, '').replace(/[)\s]+$/, '');
         break;
       }
     }
@@ -163,7 +210,7 @@ export function parseScheduleText(text: string): ScheduleTextResult {
 
     if (componentStarts.length === 0) {
       // No explicit component row — treat the whole block as one lecture.
-      const pattern = parseComponentRow('lecture', block);
+      const pattern = parseComponentRow('lecture', block.replace(/\n/g, ' '));
       if (pattern) patterns.push(pattern);
       else anyUnparsed = true;
     } else {
