@@ -5,7 +5,7 @@
  * empty for 45+ days. Protected by PUSH_TICK_SECRET.
  */
 
-import { del, list, put } from '@vercel/blob';
+import { del, get, list, put } from '@vercel/blob';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webpush from 'web-push';
 
@@ -46,7 +46,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       devices++;
       let record: StoredRecord;
       try {
-        record = (await (await fetch(blob.url)).json()) as StoredRecord;
+        const result = await get(blob.pathname, { access: 'private' });
+        if (!result?.stream) throw new Error('empty');
+        record = (await new Response(result.stream).json()) as StoredRecord;
       } catch {
         await del(blob.url);
         deleted++;
@@ -86,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await put(
           blob.pathname,
           JSON.stringify({ ...record, notifications: remaining }),
-          { access: 'public', addRandomSuffix: false, contentType: 'application/json' },
+          { access: 'private', addRandomSuffix: false, contentType: 'application/json' },
         );
       }
     }

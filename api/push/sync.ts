@@ -64,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           notifications: pending,
           updatedAt: new Date(now).toISOString(),
         }),
-        { access: 'public', addRandomSuffix: false, contentType: 'application/json' },
+        { access: 'private', addRandomSuffix: false, contentType: 'application/json' },
       );
       return res.status(200).json({ ok: true, pending: pending.length });
     }
