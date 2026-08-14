@@ -1,4 +1,4 @@
-# Terrapin Class Compass
+# ClassCompass
 
 A local-first Expo/React Native app that answers one question — **"Where am I
 supposed to be right now?"** — and helps a UMD student track attendance and

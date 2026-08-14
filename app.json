@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "terrapin-class-compass",
-    "slug": "terrapin-class-compass",
+    "name": "ClassCompass",
+    "slug": "class-compass",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "terrapinclasscompass",
+    "scheme": "classcompass",
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon"
