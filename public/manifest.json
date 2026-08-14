@@ -1,6 +1,6 @@
 {
-  "name": "TerpCompass",
-  "short_name": "TerpCompass",
+  "name": "ClassCompass",
+  "short_name": "ClassCompass",
   "description": "Where am I supposed to be right now? UMD class compass.",
   "start_url": "/",
   "display": "standalone",

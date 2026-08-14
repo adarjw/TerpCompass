@@ -33,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!pub || !priv) {
     return res.status(500).json({ error: 'VAPID keys are not configured.' });
   }
-  webpush.setVapidDetails(process.env.VAPID_CONTACT ?? 'mailto:push@terp-compass.app', pub, priv);
+  webpush.setVapidDetails(process.env.VAPID_CONTACT ?? 'mailto:push@classcompass.app', pub, priv);
 
   const now = Date.now();
   let sent = 0;

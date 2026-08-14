@@ -643,7 +643,7 @@ export function Loading({ label }: { label?: string }) {
         <Ionicons name="compass" size={38} color="#FFFFFF" />
       </Animated.View>
       <Text style={{ fontFamily: FONT.black, fontSize: 16, color: c.text, letterSpacing: 0.3 }}>
-        Terrapin Class Compass
+        ClassCompass
       </Text>
       <ActivityIndicator color={c.accent} />
       {label ? <Text style={{ color: c.textSecondary, fontFamily: FONT.regular, fontSize: 13 }}>{label}</Text> : null}

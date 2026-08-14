@@ -96,6 +96,20 @@ export async function migrate(db: SqlExecutor): Promise<void> {
     }
   }
 
+  if (current > 0 && current < 6) {
+    // v5 -> v6: additive columns for an optional photo attached to a note.
+    for (const sql of [
+      `ALTER TABLE class_notes ADD COLUMN photo_uri TEXT;`,
+      `ALTER TABLE class_notes ADD COLUMN photo_mode TEXT;`,
+    ]) {
+      try {
+        await db.execAsync(sql);
+      } catch {
+        // Column already exists (e.g. re-running migrate); safe to ignore.
+      }
+    }
+  }
+
   if (startedAt < SCHEMA_VERSION) {
     await db.runAsync(
       `INSERT OR REPLACE INTO app_settings (key, value) VALUES ('schema_version', ?)`,
@@ -124,6 +138,7 @@ export async function wipeScheduleData(): Promise<void> {
     DELETE FROM calendar_events;
     DELETE FROM courses;
     DELETE FROM planetterp_cache;
+    DELETE FROM sandbox_blobs;
   `);
 }
 
@@ -145,6 +160,7 @@ export async function wipeAllData(): Promise<void> {
     DELETE FROM campus_locations;
     DELETE FROM walk_recordings;
     DELETE FROM planetterp_cache;
+    DELETE FROM sandbox_blobs;
     DELETE FROM app_settings;
   `);
   await migrate(db);

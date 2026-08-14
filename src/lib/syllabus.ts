@@ -92,6 +92,57 @@ export function detectTopic(line: string): string | null {
   return s;
 }
 
+const PROFESSOR_LABEL_RE = /\b(professor|instructor|prof\.?|lecturer)\b/i;
+const TA_LABEL_RE = /\bteaching assistants?\b|\btas?\b/i;
+const EMAIL_RE = /[^\s<>()[\]{},;:]+@[^\s<>()[\]{},;:]+\.[a-z]{2,}/gi;
+
+export interface DetectedContacts {
+  professorEmail: string | null;
+  taEmails: string[];
+}
+
+/**
+ * Scan syllabus text for professor/TA emails. An email is only classified
+ * when a role label ("Professor", "Instructor", "TA", "Teaching Assistant")
+ * appears on the same line or on the nearest preceding non-blank line (the
+ * common "Professor:\nJane Doe\njdoe@umd.edu" contact-block layout) —
+ * unlabeled emails are left alone rather than guessed at.
+ */
+export function detectContacts(text: string): DetectedContacts {
+  let professorEmail: string | null = null;
+  const taEmails: string[] = [];
+  const seen = new Set<string>();
+  let pendingRole: 'professor' | 'ta' | null = null;
+
+  for (const rawLine of text.split(/\r\n|\n|\r/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      pendingRole = null;
+      continue;
+    }
+    const isTA = TA_LABEL_RE.test(line);
+    const isProfessor = !isTA && PROFESSOR_LABEL_RE.test(line);
+    if (isTA) pendingRole = 'ta';
+    else if (isProfessor) pendingRole = 'professor';
+
+    const emails = line.match(EMAIL_RE);
+    if (!emails) continue;
+    const role = isTA ? 'ta' : isProfessor ? 'professor' : pendingRole;
+    for (const raw of emails) {
+      const email = raw.toLowerCase();
+      if (seen.has(email)) continue;
+      if (role === 'professor' && !professorEmail) {
+        professorEmail = email;
+        seen.add(email);
+      } else if (role === 'ta') {
+        taEmails.push(email);
+        seen.add(email);
+      }
+    }
+  }
+  return { professorEmail, taEmails };
+}
+
 export interface ChunkInput {
   resourceId: string;
   courseId: string;

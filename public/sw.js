@@ -1,5 +1,5 @@
 /**
- * TerpCompass service worker: shows web-push reminders and focuses the app
+ * ClassCompass service worker: shows web-push reminders and focuses the app
  * when one is tapped. No fetch interception — the app itself stays fully
  * network-served (no offline caching surprises).
  */
@@ -13,7 +13,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let payload = { title: 'TerpCompass', body: '' };
+  let payload = { title: 'ClassCompass', body: '' };
   try {
     if (event.data) payload = { ...payload, ...event.data.json() };
   } catch {

@@ -21,8 +21,12 @@ import type {
 
 export const BACKUP_VERSION = 2;
 
+/** Legacy app id, from before the app was renamed to ClassCompass — still accepted on restore. */
+const LEGACY_APP_ID = 'terrapin-class-compass';
+const APP_ID = 'class-compass';
+
 export interface BackupDocument {
-  app: 'terrapin-class-compass';
+  app: typeof APP_ID | typeof LEGACY_APP_ID;
   version: number;
   exportedAt: string;
   courses: Course[];
@@ -39,7 +43,7 @@ export interface BackupDocument {
 
 export function buildBackup(data: Omit<BackupDocument, 'app' | 'version' | 'exportedAt'>): string {
   const doc: BackupDocument = {
-    app: 'terrapin-class-compass',
+    app: APP_ID,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     ...data,
@@ -71,8 +75,8 @@ export function validateBackup(jsonText: string): BackupValidation {
     return { ok: false, errors: ['Backup must be a JSON object.'], doc: null };
   }
   const o = parsed as Record<string, unknown>;
-  if (o.app !== 'terrapin-class-compass') {
-    errors.push('This JSON was not exported by Terrapin Class Compass.');
+  if (o.app !== APP_ID && o.app !== LEGACY_APP_ID) {
+    errors.push('This JSON was not exported by ClassCompass.');
   }
   if (typeof o.version !== 'number' || o.version > BACKUP_VERSION) {
     errors.push(`Unsupported backup version: ${String(o.version)}.`);

@@ -141,7 +141,7 @@ export default function ImportScreen() {
         setError(invalid);
         return;
       }
-      const text = await readTextFile(picked.uri);
+      const text = await readTextFile(picked);
       const lower = picked.name.toLowerCase();
       if (lower.endsWith('.ics')) {
         const result = parseIcs(text);
@@ -170,7 +170,7 @@ export default function ImportScreen() {
     try {
       const picked = await pickDocument(['application/json', '*/*']);
       if (!picked) return;
-      const text = await readTextFile(picked.uri);
+      const text = await readTextFile(picked);
       await restoreBackup(text);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

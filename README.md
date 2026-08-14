@@ -1,4 +1,4 @@
-# Terrapin Class Compass
+# ClassCompass
 
 A local-first Expo/React Native app that answers one question — **"Where am I
 supposed to be right now?"** — and helps a UMD student track attendance and
@@ -42,6 +42,21 @@ or the "Notes" button on Home's current/next class card) to jot plain-text
 notes during or right after class. Each note is tagged with the wall-clock
 time it was written, so the log reads as a timeline of the period. Stored
 per-session in `class_notes` (`src/app/session/[id].tsx`).
+
+**Photo notes** — "Raw photo" or "Cropped photo" on the note composer attaches
+a picture (a whiteboard shot, a notebook page) to that session's notes.
+"Cropped" auto-trims a margin off each edge and bakes in the photo's EXIF
+orientation via `expo-image-manipulator`, entirely on-device
+(`src/services/notePhoto.ts`); "Raw" stores the picked image untouched. Either
+way the file lives in the app's private sandbox like any other resource.
+
+**Schedule hints from notes** — typing something like "exam Thursday" or
+"paper due next Monday" into a note is scanned for an exam/deadline keyword
+paired with a day reference (`src/lib/noteSchedule.ts#detectScheduleHint`,
+deterministic, same "never invent a date" rule as the syllabus/email
+detectors). A match surfaces a confirm card under the composer — nothing is
+added to `calendar_events` without an explicit tap, mirroring the
+cancellation-detection flow below.
 
 **Walking timer** — on Home's next-class card, "⏱ Time this walk" asks where
 you're starting from (previous class, a South Campus dining hall,
@@ -133,6 +148,7 @@ can generate richer catch-up plans, quizzes, and summaries — but:
 | Walking-time estimate + campus building database | `src/lib/walking.ts`, `src/lib/campus.ts`, `src/app/buildings.tsx` |
 | Absence recording ("absence recovery task") | `src/app/absence/[sessionId].tsx` |
 | Resource attach + local PDF/text extraction | `src/services/files.ts`, `src/lib/pdf.ts` |
+| Professor/TA email autofill from a syllabus upload | `src/lib/syllabus.ts#detectContacts` |
 | Deterministic catch-up plan builder | `src/lib/plan.ts`, `src/lib/syllabus.ts` |
 | Attendance-importance meter (exam/quiz/policy detection) | `src/lib/importance.ts` |
 | AI provider abstraction (local + opt-in CLI) | `src/lib/ai/` |
@@ -141,6 +157,8 @@ can generate richer catch-up plans, quizzes, and summaries — but:
 | JSON backup / restore, delete-all-data | `src/lib/backup.ts`, `src/app/(tabs)/settings.tsx` |
 | Absence-notice email drafts (5 reason templates, mailto: hand-off) | `src/lib/emailDrafts.ts` |
 | Timestamped class notes per session | `src/app/session/[id].tsx` |
+| Photo notes (raw / auto-cropped) | `src/services/notePhoto.ts`, `src/app/session/[id].tsx` |
+| Schedule hints detected from note text | `src/lib/noteSchedule.ts` |
 | Walking timer → recorded-average estimate | `src/lib/walking.ts`, Home's `WalkTimerWidget` |
 | SQLite schema + repositories | `src/db/` |
 
@@ -252,3 +270,16 @@ end-to-end in the Expo web preview using the demo data seed.
   outer component that returns `<Loading />` until `ready`, and an inner
   `SettingsForm` that only mounts afterward. Follow the same pattern for any
   new screen with editable fields seeded from context.
+- **`expo-file-system`'s `File`/`Directory` classes have no web
+  implementation** — every native method is a no-op stub there
+  (`ExpoFileSystem.web.ts`), so constructing one throws. Native code
+  (`services/files.ts`'s `resourcesDir`/`sandboxDir`) still uses them for a
+  real sandbox directory on disk. Web instead stores picked bytes as BLOB
+  rows in a `sandbox_blobs` table and hands out a synthetic
+  `sandbox-blob://<id>` URI in their place; reading text/PDF bytes from a
+  freshly picked file goes straight through the browser's `Blob`/`File` APIs
+  instead, sidestepping the unsupported classes entirely. `SandboxImage`
+  (`components/SandboxImage.tsx`) resolves a stored URI to something
+  `<Image>` can render — a real `file://` path on native, or a freshly
+  regenerated `data:` URI on web (unlike a `blob:` object URL, that survives
+  a reload since it's rebuilt from durably stored bytes each time).

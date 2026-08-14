@@ -28,6 +28,7 @@ import {
   resourcesRepo,
 } from '@/db/repo';
 import { findBuilding } from '@/lib/campus';
+import type { DetectedContacts } from '@/lib/syllabus';
 import { formatDateHuman, formatTime12 } from '@/lib/time';
 import type { Absence, CampusLocation, Course, MeetingPattern, Resource, ResourceKind } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
@@ -67,6 +68,7 @@ export default function CourseScreen() {
   const [enrichBusy, setEnrichBusy] = useState(false);
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [showAllProfs, setShowAllProfs] = useState(false);
+  const [contactsNote, setContactsNote] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -127,6 +129,34 @@ export default function CourseScreen() {
     bump();
   };
 
+  /**
+   * Autofill professor/TA emails from a syllabus upload — only into fields
+   * that are still blank, and only what's literally in the document (never
+   * overwrites something already entered; always reversible via Edit).
+   */
+  const applyDetectedContacts = async (contacts: DetectedContacts | undefined) => {
+    if (!db || !contacts) return;
+    const updates: Partial<Course> = {};
+    if (!course.professorEmail && contacts.professorEmail) {
+      updates.professorEmail = contacts.professorEmail;
+    }
+    if (!course.taEmails && contacts.taEmails.length > 0) {
+      updates.taEmails = contacts.taEmails.join(', ');
+    }
+    if (Object.keys(updates).length === 0) return;
+    const updated = { ...course, ...updates };
+    await coursesRepo.upsert(db, updated);
+    setCourse(updated);
+    bump();
+    const filled = [
+      updates.professorEmail ? 'professor email' : null,
+      updates.taEmails ? 'TA email(s)' : null,
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    setContactsNote(`Filled ${filled} from the syllabus — check Edit if it's not right.`);
+  };
+
   const semesterYear = Number(course.semesterStart.slice(0, 4)) || new Date().getFullYear();
 
   const attachFile = async (kind: ResourceKind) => {
@@ -138,6 +168,7 @@ export default function CourseScreen() {
       if (picked) {
         const result = await attachFileResource(db, course.id, kind, picked, semesterYear);
         if (result.warning) setError(result.warning);
+        await applyDetectedContacts(result.contacts);
         bump();
       }
     } catch (e) {
@@ -150,7 +181,8 @@ export default function CourseScreen() {
   const savePaste = async () => {
     if (!db || !pasteMode) return;
     try {
-      await attachTextResource(db, course.id, pasteMode, pasteTitle || 'Pasted text', pasteText, semesterYear);
+      const result = await attachTextResource(db, course.id, pasteMode, pasteTitle || 'Pasted text', pasteText, semesterYear);
+      await applyDetectedContacts(result.contacts);
       setPasteMode(null);
       setPasteTitle('');
       setPasteText('');
@@ -169,7 +201,7 @@ export default function CourseScreen() {
         onPress: async () => {
           if (!db) return;
           await resourcesRepo.remove(db, res.id);
-          deleteSandboxFile(res.fileUri);
+          await deleteSandboxFile(db, res.fileUri);
           bump();
         },
       },
@@ -374,6 +406,11 @@ export default function CourseScreen() {
 
         <Subtitle>Resources</Subtitle>
         {error ? <ErrorBox message={error} /> : null}
+        {contactsNote ? (
+          <Body secondary style={{ fontSize: 13, marginBottom: 8 }}>
+            {contactsNote}
+          </Body>
+        ) : null}
         {resources.length === 0 ? (
           <EmptyState
             title="No resources yet"

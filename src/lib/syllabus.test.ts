@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chunkResourceText, detectDate, detectTopic } from './syllabus';
+import { chunkResourceText, detectContacts, detectDate, detectTopic } from './syllabus';
 
 describe('detectDate', () => {
   it('parses ISO dates', () => {
@@ -32,6 +32,41 @@ describe('detectTopic', () => {
   });
   it('returns the whole remainder when there is only one sentence', () => {
     expect(detectTopic('2026-09-09: Midterm exam in class')).toBe('Midterm exam in class');
+  });
+});
+
+describe('detectContacts', () => {
+  it('classifies a same-line "Professor: ... (email)" contact', () => {
+    const result = detectContacts('Professor: Jane Doe (jdoe@umd.edu)');
+    expect(result.professorEmail).toBe('jdoe@umd.edu');
+    expect(result.taEmails).toEqual([]);
+  });
+
+  it('classifies multiple TA emails, each on their own labeled line', () => {
+    const result = detectContacts('TA: John Smith - jsmith@umd.edu\nTA: Amy Lee - alee@umd.edu');
+    expect(result.taEmails).toEqual(['jsmith@umd.edu', 'alee@umd.edu']);
+  });
+
+  it('carries a role label over to the email on the next non-blank line', () => {
+    const result = detectContacts('Instructor\nJane Doe\njdoe@umd.edu');
+    expect(result.professorEmail).toBe('jdoe@umd.edu');
+  });
+
+  it('resets the pending role after a blank line', () => {
+    const result = detectContacts('Professor\nJane Doe\n\nOffice: IRB 1234\ncontact@registrar.umd.edu');
+    expect(result.professorEmail).toBeNull();
+  });
+
+  it('does not classify an email with no nearby role label', () => {
+    const result = detectContacts('Questions? Email help@umd.edu.');
+    expect(result.professorEmail).toBeNull();
+    expect(result.taEmails).toEqual([]);
+  });
+
+  it('lowercases emails and never classifies the same address as both roles', () => {
+    const result = detectContacts('Professor: jdoe@umd.edu\nTA: JDOE@umd.edu');
+    expect(result.professorEmail).toBe('jdoe@umd.edu');
+    expect(result.taEmails).toEqual([]);
   });
 });
 

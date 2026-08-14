@@ -1,5 +1,5 @@
 /**
- * Core domain types for Terrapin Class Compass.
+ * Core domain types for ClassCompass.
  *
  * Times are stored as local wall-clock strings ("HH:MM") and dates as
  * "YYYY-MM-DD". Concrete Date objects are only materialized at the edge
@@ -98,6 +98,10 @@ export interface ClassNote {
   timestamp: string;
   text: string;
   createdAt: string; // ISO
+  /** Local sandbox URI of an attached photo, if any (board/notebook shot). */
+  photoUri?: string;
+  /** 'raw' stores the photo untouched; 'cropped' auto-trims the margins. */
+  photoMode?: 'raw' | 'cropped';
 }
 
 /**

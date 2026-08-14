@@ -61,7 +61,7 @@ export default function EmailScreen() {
       if (!picked) return;
       const invalid = validateImportedFile(picked.name, picked.size);
       if (invalid) return setError(invalid);
-      const raw = await readTextFile(picked.uri);
+      const raw = await readTextFile(picked);
       const { body } = extractEmlBody(raw);
       setText(body);
       runAnalysis(body);
