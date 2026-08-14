@@ -290,6 +290,8 @@ export interface AppSettings {
    * the app's own relay while the PWA is closed.
    */
   webPushEnabled: boolean;
+  /** Whether the first-run welcome walkthrough has already been shown. */
+  onboardingSeen: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -312,6 +314,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   darkMode: 'system',
   studentName: '',
   webPushEnabled: false,
+  onboardingSeen: false,
 };
 
 /** Importance of physically attending a specific class session. */

@@ -26,6 +26,7 @@ import {
   TextLink,
   useColors,
 } from '@/components/ui';
+import { WelcomeModal } from '@/components/WelcomeModal';
 import {
   chunksRepo,
   coursesRepo,
@@ -71,11 +72,15 @@ const WALK_START_OPTIONS: WalkStartPoint[] = [
 ];
 
 export default function HomeScreen() {
-  const { db, ready, initError, settings, version, bump, rescheduleNotifications } = useApp();
+  const { db, ready, initError, settings, version, bump, rescheduleNotifications, saveSettings } = useApp();
   const c = useColors();
   const [data, setData] = useState<HomeData | null>(null);
   const [now, setNow] = useState(new Date());
   const [error, setError] = useState<string | null>(null);
+  // Hides the welcome modal the instant it's dismissed rather than waiting
+  // on the settings save round-trip (which would otherwise let it flash
+  // back into view during a route transition started by the same tap).
+  const [welcomeDismissedLocally, setWelcomeDismissedLocally] = useState(false);
 
   // Tick the countdown every 30 seconds.
   useEffect(() => {
@@ -176,8 +181,38 @@ export default function HomeScreen() {
     day: 'numeric',
   });
 
+  // The local flag hides the modal instantly. The settings write is
+  // *awaited* before either CTA navigates away: pushing a route can remount
+  // this screen, and an in-flight (unawaited) write would lose the race,
+  // letting a freshly-mounted instance read onboardingSeen as still false
+  // and show the modal again right on top of the page just navigated to.
+  const dismissWelcome = async () => {
+    setWelcomeDismissedLocally(true);
+    if (!settings.onboardingSeen) await saveSettings({ ...settings, onboardingSeen: true });
+  };
+
+  const showWelcome = ready && !welcomeDismissedLocally && !settings.onboardingSeen && !data.hasCourses;
+
   return (
     <Screen>
+      {/* Unmounted rather than passed visible={false}: RN-web's Modal exit
+          animation doesn't reliably tear down its portal in this app's
+          setup, which left the overlay on screen after dismissal even
+          though its own visible prop had already gone false. */}
+      {showWelcome ? (
+        <WelcomeModal
+          visible
+          onBuildSchedule={async () => {
+            await dismissWelcome();
+            router.push('/schedule');
+          }}
+          onSeeFeatures={async () => {
+            await dismissWelcome();
+            router.push('/features');
+          }}
+          onDismiss={dismissWelcome}
+        />
+      ) : null}
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <Text
           style={{

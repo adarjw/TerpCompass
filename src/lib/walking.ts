@@ -12,6 +12,29 @@ const EARTH_RADIUS_M = 6371000;
 const ROUTE_INDIRECTNESS = 1.3;
 export const DEFAULT_WALKING_SPEED_MPS = 1.35;
 
+/**
+ * Named walking-pace presets so students pick a pace instead of typing a
+ * raw m/s number. Values are typical pedestrian speeds (Slow ≈ strolling
+ * with a full backpack, Medium ≈ average adult pace, Fast ≈ brisk/late).
+ */
+export interface WalkSpeedPreset {
+  id: 'slow' | 'medium' | 'fast';
+  label: string;
+  mps: number;
+}
+
+export const WALK_SPEED_PRESETS: WalkSpeedPreset[] = [
+  { id: 'slow', label: 'Slow', mps: 1.0 },
+  { id: 'medium', label: 'Medium', mps: DEFAULT_WALKING_SPEED_MPS },
+  { id: 'fast', label: 'Fast', mps: 1.7 },
+];
+
+/** Which preset a stored speed matches, if any (within rounding tolerance). */
+export function matchWalkSpeedPreset(mps: number): WalkSpeedPreset['id'] | null {
+  const match = WALK_SPEED_PRESETS.find((p) => Math.abs(p.mps - mps) < 0.01);
+  return match?.id ?? null;
+}
+
 export function haversineMeters(
   lat1: number,
   lon1: number,

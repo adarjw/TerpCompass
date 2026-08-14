@@ -6,6 +6,8 @@ import {
   estimateWalkWithRecordings,
   haversineMeters,
   leaveAt,
+  matchWalkSpeedPreset,
+  WALK_SPEED_PRESETS,
 } from './walking';
 
 describe('haversineMeters', () => {
@@ -115,5 +117,23 @@ describe('bestMapUrl', () => {
   it('falls back to a text search when coordinates are unknown', () => {
     const url = bestMapUrl(null, 'Atlantic Building', false);
     expect(url).toContain(encodeURIComponent('Atlantic Building University of Maryland College Park'));
+  });
+});
+
+describe('WALK_SPEED_PRESETS / matchWalkSpeedPreset', () => {
+  it('has exactly the three named paces, slowest to fastest', () => {
+    expect(WALK_SPEED_PRESETS.map((p) => p.id)).toEqual(['slow', 'medium', 'fast']);
+    expect(WALK_SPEED_PRESETS[0].mps).toBeLessThan(WALK_SPEED_PRESETS[1].mps);
+    expect(WALK_SPEED_PRESETS[1].mps).toBeLessThan(WALK_SPEED_PRESETS[2].mps);
+  });
+
+  it('matches a stored speed back to its preset', () => {
+    for (const preset of WALK_SPEED_PRESETS) {
+      expect(matchWalkSpeedPreset(preset.mps)).toBe(preset.id);
+    }
+  });
+
+  it('returns null for a custom speed that matches no preset', () => {
+    expect(matchWalkSpeedPreset(2.2)).toBeNull();
   });
 });
