@@ -148,6 +148,7 @@ can generate richer catch-up plans, quizzes, and summaries — but:
 | Walking-time estimate + campus building database | `src/lib/walking.ts`, `src/lib/campus.ts`, `src/app/buildings.tsx` |
 | Absence recording ("absence recovery task") | `src/app/absence/[sessionId].tsx` |
 | Resource attach + local PDF/text extraction | `src/services/files.ts`, `src/lib/pdf.ts` |
+| Professor/TA email autofill from a syllabus upload | `src/lib/syllabus.ts#detectContacts` |
 | Deterministic catch-up plan builder | `src/lib/plan.ts`, `src/lib/syllabus.ts` |
 | Attendance-importance meter (exam/quiz/policy detection) | `src/lib/importance.ts` |
 | AI provider abstraction (local + opt-in CLI) | `src/lib/ai/` |

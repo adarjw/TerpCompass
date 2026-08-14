@@ -19,7 +19,7 @@ import type { SqlExecutor } from '../db/database';
 import { chunksRepo, resourcesRepo } from '../db/repo';
 import { makeId } from '../lib/ids';
 import { extractPdfText } from '../lib/pdf';
-import { chunkResourceText } from '../lib/syllabus';
+import { chunkResourceText, detectContacts, type DetectedContacts } from '../lib/syllabus';
 import type { Resource, ResourceKind } from '../lib/types';
 
 const RESOURCE_DIR = 'resources';
@@ -233,6 +233,13 @@ export interface AttachResult {
   resource: Resource;
   chunkCount: number;
   warning?: string;
+  /** Professor/TA emails found in a syllabus upload, if any. */
+  contacts?: DetectedContacts;
+}
+
+function contactsOrUndefined(text: string): DetectedContacts | undefined {
+  const found = detectContacts(text);
+  return found.professorEmail || found.taEmails.length > 0 ? found : undefined;
 }
 
 /**
@@ -282,7 +289,11 @@ export async function attachFileResource(
     await chunksRepo.insertMany(db, chunks);
     chunkCount = chunks.length;
   }
-  return { resource, chunkCount, warning: outcome.error };
+  const contacts =
+    kind === 'syllabus' && outcome.status === 'ok'
+      ? contactsOrUndefined(outcome.pages.map((p) => p.text).join('\n'))
+      : undefined;
+  return { resource, chunkCount, warning: outcome.error, contacts };
 }
 
 /** Store pasted text / a link as a resource with chunks. */
@@ -322,7 +333,8 @@ export async function attachTextResource(
     await chunksRepo.insertMany(db, chunks);
     chunkCount = chunks.length;
   }
-  return { resource, chunkCount };
+  const contacts = kind === 'syllabus' && text.trim() ? contactsOrUndefined(text) : undefined;
+  return { resource, chunkCount, contacts };
 }
 
 /** Delete the sandbox copy when a resource/note photo is removed. */
