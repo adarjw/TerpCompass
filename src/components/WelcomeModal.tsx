@@ -71,7 +71,7 @@ export function WelcomeModal({
               </Row>
               <Body secondary style={{ fontSize: 13.5, lineHeight: 19, marginBottom: 10 }}>
                 For the smoothest experience — full-screen, faster, and able to send you class
-                reminders — add TerpCompass to your Home Screen:
+                reminders — add ClassCompass to your Home Screen:
               </Body>
               <Body secondary style={{ fontSize: 13.5, lineHeight: 23, marginBottom: 12 }}>
                 1. Tap the <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Share</Body> icon in
@@ -87,7 +87,7 @@ export function WelcomeModal({
             <>
               <Row style={{ gap: 8, marginBottom: 4, paddingRight: 24 }}>
                 <Icon name="compass" size={20} color={c.accent} />
-                <Body style={{ fontFamily: FONT.bold, fontSize: 17 }}>Welcome to TerpCompass</Body>
+                <Body style={{ fontFamily: FONT.bold, fontSize: 17 }}>Welcome to ClassCompass</Body>
               </Row>
               <Body secondary style={{ fontSize: 13.5, lineHeight: 19, marginBottom: 10 }}>
                 Always know where you&apos;re supposed to be — and catch up fast if you miss a
