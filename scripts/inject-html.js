@@ -3,7 +3,7 @@
  *
  * Expo's SPA output ("single") doesn't support the app/+html.tsx shell, so
  * this script patches dist/index.html directly:
- *  - title + PWA identity ("TerpCompass" on the phone home screen)
+ *  - title + PWA identity ("ClassCompass" on the phone home screen)
  *  - viewport-fit=cover, which exposes env(safe-area-inset-*) so the tab
  *    bar pads itself above the iPhone home indicator instead of being
  *    covered by it
@@ -20,14 +20,14 @@ html = html.replace(
   /<meta name="viewport"[^>]*\/>/,
   '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />',
 );
-html = html.replace(/<title>[^<]*<\/title>/, '<title>TerpCompass</title>');
+html = html.replace(/<title>[^<]*<\/title>/, '<title>ClassCompass</title>');
 
 const headExtras = [
   '<meta name="description" content="Where am I supposed to be right now? UMD class compass." />',
   '<meta name="theme-color" content="#E21833" />',
   '<meta name="apple-mobile-web-app-capable" content="yes" />',
   '<meta name="mobile-web-app-capable" content="yes" />',
-  '<meta name="apple-mobile-web-app-title" content="TerpCompass" />',
+  '<meta name="apple-mobile-web-app-title" content="ClassCompass" />',
   '<meta name="apple-mobile-web-app-status-bar-style" content="default" />',
   '<link rel="apple-touch-icon" href="/icons/terpcompass-180.png" />',
   '<link rel="manifest" href="/manifest.json" />',

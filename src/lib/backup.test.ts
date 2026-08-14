@@ -26,6 +26,12 @@ describe('backup validate/build round trip', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('accepts a backup exported before the app was renamed to ClassCompass', () => {
+    const json = JSON.stringify({ app: 'terrapin-class-compass', version: 2, ...baseData });
+    const result = validateBackup(json);
+    expect(result.ok).toBe(true);
+  });
+
   it('rejects a backup from a different app', () => {
     const json = JSON.stringify({ app: 'other-app', version: 2, ...baseData });
     const result = validateBackup(json);

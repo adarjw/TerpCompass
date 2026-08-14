@@ -124,8 +124,8 @@ function SettingsForm() {
         courses, patterns, sessions, absences, resources, chunks, plans, tasks, locations,
         settings: settings as unknown as Record<string, unknown>,
       });
-      const uri = writeExportFile('terrapin-backup.json', json);
-      await Share.share({ url: uri, message: json.length > 50000 ? 'Terrapin Class Compass backup' : json, title: 'terrapin-backup.json' });
+      const uri = writeExportFile('classcompass-backup.json', json);
+      await Share.share({ url: uri, message: json.length > 50000 ? 'ClassCompass backup' : json, title: 'classcompass-backup.json' });
     } catch (e) {
       setError(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
     }
