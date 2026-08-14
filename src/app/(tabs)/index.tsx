@@ -457,12 +457,52 @@ function FocusCard({
       </Row>
 
       <Card>
-        <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.accent, letterSpacing: 0.2 }}>
-          {course.code}
-        </Text>
-        {course.name && course.name.trim() !== course.code ? (
-          <Body style={{ fontFamily: FONT.bold }}>{course.name}</Body>
-        ) : null}
+        <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.accent, letterSpacing: 0.2 }}>
+              {course.code}
+            </Text>
+            {course.name && course.name.trim() !== course.code ? (
+              <Body style={{ fontFamily: FONT.bold }}>{course.name}</Body>
+            ) : null}
+          </View>
+          {/* Same-day countdown to the class starting — distinct from the
+              walk-aware "leave by" line above, which is about departure,
+              not the class itself. Not shown once in session (no "starts
+              in" once it's started) or for classes on a different day
+              (that's what the header's "In N days" already covers). */}
+          {!isCurrent && session.date === toISODate(now) ? (
+            <View
+              style={{
+                backgroundColor: c.accent + '14',
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                alignItems: 'center',
+                minWidth: 64,
+              }}>
+              <Text
+                style={{
+                  fontFamily: FONT.bold,
+                  fontSize: 10.5,
+                  color: c.accent,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}>
+                Starts in
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FONT.black,
+                  fontSize: 15,
+                  color: c.accent,
+                  fontVariant: ['tabular-nums'],
+                }}>
+                {formatCountdown(msUntilStart)}
+              </Text>
+            </View>
+          ) : null}
+        </Row>
         <Row style={{ marginTop: 6, marginBottom: 10, gap: 6 }}>
           {isCurrent ? <LiveDot color={c.accent} /> : null}
           <Badge label={MEETING_COMPONENT_LABEL[session.patternLabel]} tone="accent" />
