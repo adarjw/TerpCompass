@@ -94,6 +94,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [db]);
 
+  // Safety net: re-sync the web-push relay once per app open, not just on
+  // explicit data changes. If a previous sync silently failed (e.g. a relay
+  // outage), the next schedule edit would normally be the only retry
+  // opportunity — for a student who doesn't touch their schedule for days,
+  // that could mean a long silent gap. This closes it without depending on
+  // any user action beyond opening the app.
+  useEffect(() => {
+    if (db) rescheduleNotifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on the db-ready transition, not every rescheduleNotifications identity change
+  }, [db]);
+
   const saveSettings = useCallback(
     async (s: AppSettings) => {
       if (!db) return;

@@ -225,6 +225,25 @@ Vercel deployment — no third-party service):
        cron is unreliable for frequent intervals)
 - iPhone: requires iOS 16.4+ and the app added to the home screen; enable the
   toggle from inside the installed app.
+- **Automatic sync, no manual refresh needed**: every schedule mutation
+  (import, add/edit/delete a course, mark an absence, apply an email-detected
+  change) calls `rescheduleNotifications()`, which re-syncs the full plan to
+  the relay — see the call sites listed in `src/state/AppContext.tsx`'s
+  `rescheduleNotifications`. `AppContext` also re-syncs once whenever the app
+  opens (not just on data changes), so a relay outage or a silently failed
+  sync self-heals the next time the student opens the app, without requiring
+  them to touch their schedule or tap anything. The "Reschedule notifications"
+  button in Settings exists only as a manual escape hatch — it should never be
+  required for normal use.
+- **Failure visibility**: `syncWebPush` checks the sync response status and
+  `console.error`s on both HTTP failures and network errors — `fetch()` only
+  rejects on network-level failures, so an unchecked call would silently
+  treat a 4xx/5xx relay response as a successful sync. (This exact gap let a
+  real incident — every sync after a device's first attempt failing with a
+  500 from a Vercel Blob API change — go unnoticed until a user reported
+  missing notifications.) `api/push/sync.test.ts` and `api/push/tick.test.ts`
+  cover the specific failure mode (an overwrite of an existing blob path
+  without `allowOverwrite: true`) as a regression guard.
 
 ## Trying it out
 
