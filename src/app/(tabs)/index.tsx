@@ -4,7 +4,7 @@
  * attendance importance, actions. Color only where it means something.
  */
 
-import { router, useFocusEffect, useSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Animated, Easing, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -73,11 +73,22 @@ const WALK_START_OPTIONS: WalkStartPoint[] = [
 export default function HomeScreen() {
   const { db, ready, initError, settings, version, bump, rescheduleNotifications } = useApp();
   const c = useColors();
-  const params = useSearchParams();
+  const params = useLocalSearchParams();
   const [data, setData] = useState<HomeData | null>(null);
   const [now, setNow] = useState(new Date());
   const [error, setError] = useState<string | null>(null);
-  const [countdownStartTime, setCountdownStartTime] = useState<Date | null>(null);
+  const [countdownStartTime, setCountdownStartTime] = useState<Date | null>(() => {
+    const startTimeStr = params.showCountdown;
+    if (startTimeStr && typeof startTimeStr === 'string') {
+      try {
+        const startTime = new Date(decodeURIComponent(startTimeStr));
+        if (!Number.isNaN(startTime.getTime())) return startTime;
+      } catch {
+        // Ignore invalid date strings
+      }
+    }
+    return null;
+  });
 
   // Tick the countdown every 30 seconds, or every 5 seconds if showing a countdown timer.
   useEffect(() => {
@@ -86,20 +97,6 @@ export default function HomeScreen() {
     return () => clearInterval(t);
   }, [countdownStartTime]);
 
-  // Check for showCountdown parameter from notification click.
-  useEffect(() => {
-    const startTimeStr = params.showCountdown;
-    if (startTimeStr && typeof startTimeStr === 'string') {
-      try {
-        const startTime = new Date(decodeURIComponent(startTimeStr));
-        if (!Number.isNaN(startTime.getTime())) {
-          setCountdownStartTime(startTime);
-        }
-      } catch {
-        // Ignore invalid date strings
-      }
-    }
-  }, [params.showCountdown]);
 
   const load = useCallback(async () => {
     if (!db) return;
@@ -620,7 +617,7 @@ function ClassCountdownCard({
   const isClass = msUntilStart >= 0;
 
   return (
-    <Card style={{ backgroundColor: isClass ? c.accentBg : c.dangerBg, marginBottom: 12 }}>
+    <Card style={{ backgroundColor: c.subtle, marginBottom: 12 }}>
       <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary, marginBottom: 2 }}>
