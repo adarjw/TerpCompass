@@ -93,7 +93,7 @@ export async function syncWebPush(
   if (!sub) return;
   const planned = planNotifications(input, settings, now);
   try {
-    await fetch('/api/push/sync', {
+    const res = await fetch('/api/push/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -106,8 +106,20 @@ export async function syncWebPush(
         })),
       }),
     });
-  } catch {
-    // Offline sync failures are fine — the next schedule change retries.
+    // fetch() only rejects on network-level failures — a 4xx/5xx response
+    // resolves normally, so an unchecked call here would silently treat a
+    // broken relay as a successful sync indefinitely (this is exactly how a
+    // real production bug went unnoticed: every sync after the first for a
+    // device 500'd, and nothing surfaced it until a user reported missing
+    // notifications). Logging keeps a future regression visible in the
+    // console instead of failing silently forever.
+    if (!res.ok) {
+      console.error(`Web push sync failed: ${res.status} ${await res.text().catch(() => '')}`);
+    }
+  } catch (e) {
+    console.error('Web push sync failed (network error):', e);
+    // Offline failures still aren't fatal — the next schedule change or app
+    // open (see AppContext's sync-on-open effect) retries automatically.
   }
 }
 
