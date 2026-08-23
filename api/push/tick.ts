@@ -71,7 +71,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       for (const n of due) {
         try {
           const payload: Record<string, string> = { title: n.title, body: n.body };
-          if (n.startTime) payload.startTime = n.startTime;
+          if (n.startTime) {
+            payload.startTime = n.startTime;
+            // Recalculate body to show actual time-to-class at send time, not pre-planned time.
+            const startTime = new Date(n.startTime);
+            const minsToStart = Math.round((startTime.getTime() - now) / 60000);
+            if (minsToStart > 0) {
+              payload.body = `${minsToStart} min${minsToStart === 1 ? '' : 's'} to class. ${n.body}`;
+            }
+          }
           await webpush.sendNotification(record.subscription, JSON.stringify(payload));
           sent++;
         } catch (e) {
