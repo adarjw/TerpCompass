@@ -35,6 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'Invalid subscription.' });
       }
       const now = Date.now();
+      const SYNC_HORIZON_MS = 5 * 60 * 1000; // Don't store notifications due within 5 minutes; let tick send them.
       const pending = (Array.isArray(notifications) ? notifications : [])
         .filter(
           (n: unknown): n is { fireAt: string; title: string; body: string; startTime?: string } =>
@@ -50,7 +51,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }))
         .filter((n) => {
           const t = Date.parse(n.fireAt);
-          return Number.isFinite(t) && t > now && t < now + MAX_HORIZON_MS;
+          // Keep notifications that are: far enough in the future (> 5 min) AND not beyond 30 days.
+          // Skip near-term ones (< 5 min) — they'll be sent on the next tick anyway.
+          return Number.isFinite(t) && t > now + SYNC_HORIZON_MS && t < now + MAX_HORIZON_MS;
         })
         .sort((a, b) => a.fireAt.localeCompare(b.fireAt))
         .slice(0, MAX_NOTIFICATIONS);

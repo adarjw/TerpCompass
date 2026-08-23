@@ -61,6 +61,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const due = record.notifications.filter((n) => {
         const t = Date.parse(n.fireAt);
+        // Only send notifications within a ~2-minute window: 60 seconds in the future
+        // or within 60 seconds in the past (catch late arrivals). Skip anything older
+        // to prevent re-sends from old app syncs when settings were toggled.
         return t <= now + EARLY_WINDOW_MS && t > now - EARLY_WINDOW_MS;
       });
       const remaining = record.notifications.filter(
