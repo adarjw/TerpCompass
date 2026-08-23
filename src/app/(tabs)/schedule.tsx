@@ -224,7 +224,19 @@ export default function ScheduleScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 100 }}>
-        {daySessions.length === 0 ? (
+        {courses.length === 0 ? (
+          <>
+            <EmptyState
+              icon="scan-outline"
+              title="No schedule yet"
+              hint="Scan a screenshot of your Testudo schedule to import every class in one tap — it'll also sync with PlanetTerp to fill in real course names, professors, and ratings."
+            />
+            <Button label="Scan a schedule screenshot" icon="scan-outline" onPress={() => router.push('/import')} />
+            <Row style={{ justifyContent: 'center', marginTop: 4 }}>
+              <TextLink label="Add a class manually" icon="add" onPress={() => router.push('/course-edit')} />
+            </Row>
+          </>
+        ) : daySessions.length === 0 ? (
           <EmptyState
             icon="cafe-outline"
             title={`Nothing on ${monthDayLabel(selectedDate)}`}
@@ -370,7 +382,7 @@ export default function ScheduleScreen() {
         <Subtitle>Courses</Subtitle>
         {courses.length === 0 ? (
           <Body secondary style={{ marginBottom: 8 }}>
-            No courses yet — import a schedule or add one manually.
+            No courses yet.
           </Body>
         ) : (
           courses.map((course) => (

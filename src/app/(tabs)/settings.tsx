@@ -33,6 +33,7 @@ import {
 } from '@/db/repo';
 import { buildBackup } from '@/lib/backup';
 import { DEFAULT_SETTINGS, type AppSettings } from '@/lib/types';
+import { matchWalkSpeedPreset, WALK_SPEED_PRESETS } from '@/lib/walking';
 import { deleteAllSandboxFiles, writeExportFile } from '@/services/files';
 import { disableWebPush, enableWebPush, isPushSupported } from '@/services/webpush';
 import { useApp } from '@/state/AppContext';
@@ -61,7 +62,6 @@ const REMINDER_KEYS = [
 function SettingsForm() {
   const { db, settings, saveSettings, bump, rescheduleNotifications } = useApp();
   const [error, setError] = useState<string | null>(null);
-  const [walkSpeed, setWalkSpeed] = useState(String(settings.walkingSpeedMps));
   const [homeLat, setHomeLat] = useState(settings.homeLat?.toString() ?? '');
   const [homeLon, setHomeLon] = useState(settings.homeLon?.toString() ?? '');
   const [cliPath, setCliPath] = useState(settings.aiCliPath);
@@ -259,27 +259,35 @@ function SettingsForm() {
             <View style={{ marginTop: 10 }}>
               <Field label="Latitude" value={homeLat} onChangeText={setHomeLat} keyboardType="numbers-and-punctuation" placeholder="38.9847" />
               <Field label="Longitude" value={homeLon} onChangeText={setHomeLon} keyboardType="numbers-and-punctuation" placeholder="-76.9384" />
-              <Field label="Walking speed (m/s, 1.35 ≈ average)" value={walkSpeed} onChangeText={setWalkSpeed} keyboardType="decimal-pad" />
               <Button
-                label="Save walking settings"
+                label="Save starting point"
                 kind="secondary"
                 compact
                 onPress={() => {
                   const lat = homeLat.trim() === '' ? null : Number(homeLat);
                   const lon = homeLon.trim() === '' ? null : Number(homeLon);
-                  const speed = Number(walkSpeed);
                   if ((lat !== null && !Number.isFinite(lat)) || (lon !== null && !Number.isFinite(lon))) {
                     setError('Latitude/longitude must be numbers like 38.9847 and -76.9384.');
                     return;
                   }
-                  if (!Number.isFinite(speed) || speed <= 0 || speed > 4) {
-                    setError('Walking speed should be between 0.5 and 4 m/s.');
-                    return;
-                  }
-                  update({ homeLat: lat, homeLon: lon, walkingSpeedMps: speed });
+                  update({ homeLat: lat, homeLon: lon });
                 }}
               />
             </View>
+          </SettingRow>
+          <SettingRow label="Walking pace" helper="Used to estimate walk times and when to leave">
+            <Row style={{ marginTop: 8 }}>
+              {WALK_SPEED_PRESETS.map((preset) => (
+                <View key={preset.id} style={{ flex: 1 }}>
+                  <Button
+                    label={preset.label}
+                    kind={matchWalkSpeedPreset(settings.walkingSpeedMps) === preset.id ? 'primary' : 'secondary'}
+                    compact
+                    onPress={() => update({ walkingSpeedMps: preset.mps })}
+                  />
+                </View>
+              ))}
+            </Row>
           </SettingRow>
           <SettingRow label="Campus buildings" helper="Entrances and walking-time overrides" onPress={() => router.push('/buildings')} right={<Body secondary>›</Body>} />
         </SettingsGroup>

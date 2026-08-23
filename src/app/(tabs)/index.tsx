@@ -26,6 +26,7 @@ import {
   TextLink,
   useColors,
 } from '@/components/ui';
+import { WelcomeModal } from '@/components/WelcomeModal';
 import {
   chunksRepo,
   coursesRepo,
@@ -71,7 +72,7 @@ const WALK_START_OPTIONS: WalkStartPoint[] = [
 ];
 
 export default function HomeScreen() {
-  const { db, ready, initError, settings, version, bump, rescheduleNotifications } = useApp();
+  const { db, ready, initError, settings, version, bump, rescheduleNotifications, saveSettings } = useApp();
   const c = useColors();
   const params = useLocalSearchParams();
   const [data, setData] = useState<HomeData | null>(null);
@@ -89,6 +90,10 @@ export default function HomeScreen() {
     }
     return null;
   });
+  // Hides the welcome modal the instant it's dismissed rather than waiting
+  // on the settings save round-trip (which would otherwise let it flash
+  // back into view during a route transition started by the same tap).
+  const [welcomeDismissedLocally, setWelcomeDismissedLocally] = useState(false);
 
   // Tick the countdown every 30 seconds, or every 5 seconds if showing a countdown timer.
   useEffect(() => {
@@ -191,8 +196,38 @@ export default function HomeScreen() {
     day: 'numeric',
   });
 
+  // The local flag hides the modal instantly. The settings write is
+  // *awaited* before either CTA navigates away: pushing a route can remount
+  // this screen, and an in-flight (unawaited) write would lose the race,
+  // letting a freshly-mounted instance read onboardingSeen as still false
+  // and show the modal again right on top of the page just navigated to.
+  const dismissWelcome = async () => {
+    setWelcomeDismissedLocally(true);
+    if (!settings.onboardingSeen) await saveSettings({ ...settings, onboardingSeen: true });
+  };
+
+  const showWelcome = ready && !welcomeDismissedLocally && !settings.onboardingSeen && !data.hasCourses;
+
   return (
     <Screen>
+      {/* Unmounted rather than passed visible={false}: RN-web's Modal exit
+          animation doesn't reliably tear down its portal in this app's
+          setup, which left the overlay on screen after dismissal even
+          though its own visible prop had already gone false. */}
+      {showWelcome ? (
+        <WelcomeModal
+          visible
+          onBuildSchedule={async () => {
+            await dismissWelcome();
+            router.push('/schedule');
+          }}
+          onSeeFeatures={async () => {
+            await dismissWelcome();
+            router.push('/features');
+          }}
+          onDismiss={dismissWelcome}
+        />
+      ) : null}
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <Text
           style={{
@@ -445,12 +480,52 @@ function FocusCard({
       </Row>
 
       <Card>
-        <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.accent, letterSpacing: 0.2 }}>
-          {course.code}
-        </Text>
-        {course.name && course.name.trim() !== course.code ? (
-          <Body style={{ fontFamily: FONT.bold }}>{course.name}</Body>
-        ) : null}
+        <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: FONT.black, fontSize: 22, color: c.accent, letterSpacing: 0.2 }}>
+              {course.code}
+            </Text>
+            {course.name && course.name.trim() !== course.code ? (
+              <Body style={{ fontFamily: FONT.bold }}>{course.name}</Body>
+            ) : null}
+          </View>
+          {/* Same-day countdown to the class starting — distinct from the
+              walk-aware "leave by" line above, which is about departure,
+              not the class itself. Not shown once in session (no "starts
+              in" once it's started) or for classes on a different day
+              (that's what the header's "In N days" already covers). */}
+          {!isCurrent && session.date === toISODate(now) ? (
+            <View
+              style={{
+                backgroundColor: c.accent + '14',
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                alignItems: 'center',
+                minWidth: 64,
+              }}>
+              <Text
+                style={{
+                  fontFamily: FONT.bold,
+                  fontSize: 10.5,
+                  color: c.accent,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                }}>
+                Starts in
+              </Text>
+              <Text
+                style={{
+                  fontFamily: FONT.black,
+                  fontSize: 15,
+                  color: c.accent,
+                  fontVariant: ['tabular-nums'],
+                }}>
+                {formatCountdown(msUntilStart)}
+              </Text>
+            </View>
+          ) : null}
+        </Row>
         <Row style={{ marginTop: 6, marginBottom: 10, gap: 6 }}>
           {isCurrent ? <LiveDot color={c.accent} /> : null}
           <Badge label={MEETING_COMPONENT_LABEL[session.patternLabel]} tone="accent" />
