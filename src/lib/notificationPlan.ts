@@ -25,6 +25,8 @@ export interface PlannedNotification {
   fireAt: Date;
   title: string;
   body: string;
+  /** ISO string of the class start time, used for client-side countdown timers. */
+  startTime?: string;
 }
 
 export interface PlanInput {
@@ -57,6 +59,7 @@ function planForSession(
       fireAt: new Date(start.getTime() - 45 * 60000),
       title: `${course.code} in 45 minutes`,
       body: `${label} — ${where}.`,
+      startTime: start.toISOString(),
     });
   }
   if (enabled.before20) {
@@ -66,6 +69,7 @@ function planForSession(
       fireAt: new Date(start.getTime() - 20 * 60000),
       title: `${course.code} in 20 minutes`,
       body: `${label} — ${where}.`,
+      startTime: start.toISOString(),
     });
   }
   if (enabled.leaveNow) {
@@ -78,6 +82,7 @@ function planForSession(
       fireAt: leave,
       title: `Leave now for ${course.code}`,
       body: `~${walk.minutes} min walk to ${where}. Class starts ${formatTime12(session.startTime)}.`,
+      startTime: start.toISOString(),
     });
   }
   if (enabled.before10) {
@@ -87,6 +92,7 @@ function planForSession(
       fireAt: new Date(start.getTime() - 10 * 60000),
       title: `${course.code} in 10 minutes`,
       body: `${where}. Almost time.`,
+      startTime: start.toISOString(),
     });
   }
   return out;

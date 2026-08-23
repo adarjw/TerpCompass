@@ -1,22 +1,26 @@
 /**
- * Relay tick: called every ~5 minutes by a GitHub Actions cron. Sends every
- * reminder that is due, rewrites each record with only what's still pending,
- * and deletes records whose subscription is gone (410/404) or that have been
- * empty for 45+ days. Protected by PUSH_TICK_SECRET.
+ * Relay tick: called every ~1 minute by an external cron pinger (GitHub
+ * Actions' own `schedule:` trigger is unreliable below ~5 minutes in
+ * practice regardless of the cron expression, so it's kept only as a
+ * redundant backup — see .github/workflows/push-tick.yml). Sends every
+ * reminder that is due, rewrites each record with only what's still
+ * pending, and deletes records whose subscription is gone (410/404) or
+ * that have been empty for 45+ days. Protected by PUSH_TICK_SECRET.
  */
 
 import { del, get, list, put } from '@vercel/blob';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import webpush from 'web-push';
 
-/** Send anything due within the next 3 minutes: with a ~5-minute cron, being
- * slightly early beats being late for a "leave now" reminder. */
-const EARLY_WINDOW_MS = 3 * 60000;
+/** Send anything due within the next 60 seconds: sized to a ~1-minute tick
+ * cadence, so "leave now" fires close to on-time without drifting minutes
+ * early the way a wider window would on a tighter cadence. */
+const EARLY_WINDOW_MS = 60000;
 const EMPTY_TTL_MS = 45 * 24 * 3600 * 1000;
 
 interface StoredRecord {
   subscription: { endpoint: string; keys: { p256dh: string; auth: string } };
-  notifications: { fireAt: string; title: string; body: string }[];
+  notifications: { fireAt: string; title: string; body: string; startTime?: string }[];
   updatedAt: string;
 }
 
@@ -63,10 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let gone = false;
       for (const n of due) {
         try {
-          await webpush.sendNotification(
-            record.subscription,
-            JSON.stringify({ title: n.title, body: n.body }),
-          );
+          const payload: Record<string, string> = { title: n.title, body: n.body };
+          if (n.startTime) payload.startTime = n.startTime;
+          await webpush.sendNotification(record.subscription, JSON.stringify(payload));
           sent++;
         } catch (e) {
           const status = (e as { statusCode?: number }).statusCode;

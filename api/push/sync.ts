@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const now = Date.now();
       const pending = (Array.isArray(notifications) ? notifications : [])
         .filter(
-          (n: unknown): n is { fireAt: string; title: string; body: string } =>
+          (n: unknown): n is { fireAt: string; title: string; body: string; startTime?: string } =>
             typeof (n as { fireAt?: unknown })?.fireAt === 'string' &&
             typeof (n as { title?: unknown })?.title === 'string' &&
             typeof (n as { body?: unknown })?.body === 'string',
@@ -46,6 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           fireAt: n.fireAt,
           title: n.title.slice(0, 120),
           body: n.body.slice(0, 300),
+          ...(typeof n.startTime === 'string' && { startTime: n.startTime }),
         }))
         .filter((n) => {
           const t = Date.parse(n.fireAt);
