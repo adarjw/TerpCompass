@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           notifications: pending,
           updatedAt: new Date(now).toISOString(),
         }),
-        { access: 'private', addRandomSuffix: false, contentType: 'application/json' },
+        { access: 'private', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/json' },
       );
       return res.status(200).json({ ok: true, pending: pending.length });
     }
@@ -84,13 +84,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Allow', 'POST, DELETE');
     return res.status(405).json({ error: 'Method not allowed.' });
   } catch (e) {
-    console.error('push/sync error:', e);
     const msg = e instanceof Error ? e.message : String(e);
-    const stack = e instanceof Error ? e.stack : undefined;
     const hint = /BLOB_READ_WRITE_TOKEN/i.test(msg)
       ? 'Blob storage is not connected to this deployment yet.'
       : msg;
-    // TODO(debug): remove the debug/stack fields once the 500 root cause is found.
-    return res.status(500).json({ error: hint, debug: msg, stack });
+    return res.status(500).json({ error: hint });
   }
 }

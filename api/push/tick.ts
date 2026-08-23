@@ -105,7 +105,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await put(
           blob.pathname,
           JSON.stringify({ ...record, notifications: remaining }),
-          { access: 'private', addRandomSuffix: false, contentType: 'application/json' },
+          { access: 'private', addRandomSuffix: false, allowOverwrite: true, contentType: 'application/json' },
         );
       }
     }
