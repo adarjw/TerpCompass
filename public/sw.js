@@ -31,15 +31,18 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: notifBody,
-      icon: '/icons/terpcompass-180.png',
-      badge: '/icons/terpcompass-180.png',
-      tag: payload.startTime ? 'class-reminder' : undefined,
-      data: payload.startTime ? { startTime: payload.startTime } : undefined,
-    }),
-  );
+  const notificationOptions = {
+    body: notifBody,
+    icon: '/icons/terpcompass-180.png',
+    badge: '/icons/terpcompass-180.png',
+    tag: 'class-reminder',
+    requireInteraction: false,
+    vibrate: [200, 100, 200],
+  };
+  if (payload.startTime) {
+    notificationOptions.data = { startTime: payload.startTime };
+  }
+  event.waitUntil(self.registration.showNotification(payload.title, notificationOptions));
 });
 
 self.addEventListener('notificationclick', (event) => {
