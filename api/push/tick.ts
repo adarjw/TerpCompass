@@ -59,7 +59,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         continue;
       }
 
-      const due = record.notifications.filter((n) => Date.parse(n.fireAt) <= now + EARLY_WINDOW_MS);
+      const due = record.notifications.filter((n) => {
+        const t = Date.parse(n.fireAt);
+        return t <= now + EARLY_WINDOW_MS && t > now - EARLY_WINDOW_MS;
+      });
       const remaining = record.notifications.filter(
         (n) => Date.parse(n.fireAt) > now + EARLY_WINDOW_MS,
       );
