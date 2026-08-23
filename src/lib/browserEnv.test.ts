@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isMobileSafari, shouldOfferAddToHomeScreen } from './browserEnv';
+import { isMobileSafari, shouldOfferAddToHomeScreen, shouldOfferSafariRedirect } from './browserEnv';
 
 const IPHONE_SAFARI =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
@@ -49,6 +49,32 @@ describe('shouldOfferAddToHomeScreen', () => {
   it('does not offer it on non-Safari browsers', () => {
     expect(
       shouldOfferAddToHomeScreen({ userAgent: ANDROID_CHROME, maxTouchPoints: 5, platform: 'Linux armv8l', isStandalone: false }),
+    ).toBe(false);
+  });
+});
+
+describe('shouldOfferSafariRedirect', () => {
+  it('offers it for iPhone Chrome, not yet installed', () => {
+    expect(
+      shouldOfferSafariRedirect({ userAgent: IPHONE_CHROME, maxTouchPoints: 5, platform: 'iPhone', isStandalone: false }),
+    ).toBe(true);
+  });
+
+  it('does not offer it for iPhone Safari (the Add to Home Screen tip covers that case)', () => {
+    expect(
+      shouldOfferSafariRedirect({ userAgent: IPHONE_SAFARI, maxTouchPoints: 5, platform: 'iPhone', isStandalone: false }),
+    ).toBe(false);
+  });
+
+  it('does not offer it once already installed to the Home Screen', () => {
+    expect(
+      shouldOfferSafariRedirect({ userAgent: IPHONE_CHROME, maxTouchPoints: 5, platform: 'iPhone', isStandalone: true }),
+    ).toBe(false);
+  });
+
+  it('does not offer it on Android', () => {
+    expect(
+      shouldOfferSafariRedirect({ userAgent: ANDROID_CHROME, maxTouchPoints: 5, platform: 'Linux armv8l', isStandalone: false }),
     ).toBe(false);
   });
 });

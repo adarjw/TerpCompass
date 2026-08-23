@@ -1,31 +1,38 @@
 /**
  * First-run welcome. On mobile Safari not yet installed, opens with the
  * Add to Home Screen tip (push reminders and the full-screen experience
- * both depend on that); always ends with a short walkthrough that sends
- * the student to build their schedule or browse the feature list. Shown
- * once — any dismissal (X, Skip, or either CTA) marks onboardingSeen so it
- * never reappears.
+ * both depend on that). On iPhone browsers other than Safari (Chrome,
+ * Firefox, Edge — all WebKit under the hood, but none of them grant Web
+ * Push the way Safari does), opens instead with a "switch to Safari" tip,
+ * since showing Safari-specific Share instructions on a screen that
+ * doesn't have that Share icon would just confuse them. Always ends with a
+ * short walkthrough that sends the student to build their schedule or
+ * browse the feature list. Shown once — any dismissal (X, Skip, or either
+ * CTA) marks onboardingSeen so it never reappears.
  */
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Modal, Platform, Pressable, View } from 'react-native';
 
-import { shouldOfferAddToHomeScreen } from '../lib/browserEnv';
+import { shouldOfferAddToHomeScreen, shouldOfferSafariRedirect } from '../lib/browserEnv';
 import { Body, Button, Card, FONT, Icon, IconRow, Row, useColors } from './ui';
 
-type Step = 'a2hs' | 'welcome';
+type Step = 'safari-redirect' | 'a2hs' | 'welcome';
 
-function detectAddToHomeScreen(): boolean {
-  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
-  return shouldOfferAddToHomeScreen({
+function detectInitialStep(): Step {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return 'welcome';
+  const env = {
     userAgent: navigator.userAgent,
     maxTouchPoints: navigator.maxTouchPoints ?? 0,
     platform: navigator.platform ?? '',
     isStandalone:
       (navigator as unknown as { standalone?: boolean }).standalone === true ||
       (typeof window !== 'undefined' && window.matchMedia?.('(display-mode: standalone)').matches) === true,
-  });
+  };
+  if (shouldOfferSafariRedirect(env)) return 'safari-redirect';
+  if (shouldOfferAddToHomeScreen(env)) return 'a2hs';
+  return 'welcome';
 }
 
 export function WelcomeModal({
@@ -40,8 +47,7 @@ export function WelcomeModal({
   onDismiss: () => void;
 }) {
   const c = useColors();
-  const [showA2HS] = useState(detectAddToHomeScreen);
-  const [step, setStep] = useState<Step>(() => (showA2HS ? 'a2hs' : 'welcome'));
+  const [step, setStep] = useState<Step>(detectInitialStep);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
@@ -63,7 +69,31 @@ export function WelcomeModal({
             <Ionicons name="close" size={18} color={c.textSecondary} />
           </Pressable>
 
-          {step === 'a2hs' ? (
+          {step === 'safari-redirect' ? (
+            <>
+              <Row style={{ gap: 8, marginBottom: 4, paddingRight: 24 }}>
+                <Icon name="compass" size={20} color={c.accent} />
+                <Body style={{ fontFamily: FONT.bold, fontSize: 17 }}>Open in Safari first</Body>
+              </Row>
+              <Body secondary style={{ fontSize: 13.5, lineHeight: 19, marginBottom: 10 }}>
+                Class reminders on iPhone only work through{' '}
+                <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Safari</Body> — this browser
+                can&apos;t grant them, even after adding the app to your Home Screen. Switch over
+                first:
+              </Body>
+              <IconRow icon="copy-outline" iconColor={c.accent}>
+                Copy this page&apos;s link (tap the address bar, then Copy)
+              </IconRow>
+              <IconRow icon="compass-outline" iconColor={c.accent}>
+                Open the Safari app
+              </IconRow>
+              <IconRow icon="clipboard-outline" iconColor={c.accent}>
+                Paste the link in and go
+              </IconRow>
+              <View style={{ height: 4 }} />
+              <Button label="Got it" icon="checkmark" onPress={() => setStep('welcome')} />
+            </>
+          ) : step === 'a2hs' ? (
             <>
               <Row style={{ gap: 8, marginBottom: 4, paddingRight: 24 }}>
                 <Icon name="share-outline" size={20} color={c.accent} />
@@ -73,14 +103,18 @@ export function WelcomeModal({
                 For the smoothest experience — full-screen, faster, and able to send you class
                 reminders — add ClassCompass to your Home Screen:
               </Body>
-              <Body secondary style={{ fontSize: 13.5, lineHeight: 23, marginBottom: 12 }}>
-                1. Tap the <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Share</Body> icon in
-                Safari{'\n'}
-                2. Scroll down and tap{' '}
+              <IconRow icon="share-outline" iconColor={c.accent}>
+                Tap the <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Share</Body> icon in
+                Safari&apos;s toolbar
+              </IconRow>
+              <IconRow icon="add-outline" iconColor={c.accent}>
+                Scroll down and tap{' '}
                 <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Add to Home Screen</Body>
-                {'\n'}
-                3. Tap <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Add</Body>
-              </Body>
+              </IconRow>
+              <IconRow icon="checkmark-circle-outline" iconColor={c.accent}>
+                Tap <Body style={{ fontFamily: FONT.bold, fontSize: 13.5 }}>Add</Body> to confirm
+              </IconRow>
+              <View style={{ height: 4 }} />
               <Button label="Got it" icon="checkmark" onPress={() => setStep('welcome')} />
             </>
           ) : (
