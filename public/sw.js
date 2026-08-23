@@ -13,29 +13,49 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let payload = { title: 'ClassCompass', body: '' };
+  let payload = { title: 'ClassCompass', body: '', startTime: null };
   try {
     if (event.data) payload = { ...payload, ...event.data.json() };
   } catch {
     if (event.data) payload.body = event.data.text();
   }
-  event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: '/icons/terpcompass-180.png',
-      badge: '/icons/terpcompass-180.png',
-    }),
-  );
+
+  let notifBody = payload.body;
+  if (payload.startTime) {
+    const start = new Date(payload.startTime);
+    const now = new Date();
+    const diffMs = start.getTime() - now.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    if (diffMins > 0) {
+      notifBody += ` (${diffMins} min)`;
+    }
+  }
+
+  const notificationOptions = {
+    body: notifBody,
+    icon: '/icons/terpcompass-180.png',
+    badge: '/icons/terpcompass-180.png',
+    tag: 'class-reminder',
+    requireInteraction: false,
+    vibrate: [200, 100, 200],
+  };
+  if (payload.startTime) {
+    notificationOptions.data = { startTime: payload.startTime };
+  }
+  event.waitUntil(self.registration.showNotification(payload.title, notificationOptions));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const url = event.notification.data?.startTime
+        ? `/?showCountdown=${encodeURIComponent(event.notification.data.startTime)}`
+        : '/';
       for (const client of clients) {
         if ('focus' in client) return client.focus();
       }
-      return self.clients.openWindow('/');
+      return self.clients.openWindow(url);
     }),
   );
 });

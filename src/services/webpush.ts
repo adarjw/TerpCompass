@@ -102,6 +102,7 @@ export async function syncWebPush(
           fireAt: p.fireAt.toISOString(),
           title: p.title,
           body: p.body,
+          ...(p.startTime && { startTime: p.startTime }),
         })),
       }),
     });

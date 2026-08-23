@@ -2,7 +2,7 @@
 
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, Linking, Platform, ScrollView, View } from 'react-native';
+import { Linking, Platform, ScrollView, View } from 'react-native';
 
 import {
   Badge,
@@ -69,6 +69,8 @@ export default function CourseScreen() {
   const [enrichNote, setEnrichNote] = useState<string | null>(null);
   const [showAllProfs, setShowAllProfs] = useState(false);
   const [contactsNote, setContactsNote] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRemoveResource, setConfirmRemoveResource] = useState<Resource | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -192,42 +194,61 @@ export default function CourseScreen() {
     }
   };
 
-  const removeResource = (res: Resource) => {
-    Alert.alert('Remove resource?', res.title, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          if (!db) return;
-          await resourcesRepo.remove(db, res.id);
-          await deleteSandboxFile(db, res.fileUri);
-          bump();
-        },
-      },
-    ]);
+  const removeResource = (res: Resource) => setConfirmRemoveResource(res);
+
+  const confirmRemoveResourceAction = async () => {
+    if (!db || !confirmRemoveResource) return;
+    await resourcesRepo.remove(db, confirmRemoveResource.id);
+    await deleteSandboxFile(db, confirmRemoveResource.fileUri);
+    setConfirmRemoveResource(null);
+    bump();
   };
 
-  const removeCourse = () => {
-    Alert.alert('Delete this course?', 'All sessions, absences, resources, and plans for it will be removed.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete course',
-        style: 'destructive',
-        onPress: async () => {
-          if (!db) return;
-          await coursesRepo.remove(db, course.id);
-          bump();
-          await rescheduleNotifications();
-          router.back();
-        },
-      },
-    ]);
+  const removeCourse = () => setConfirmDelete(true);
+
+  const confirmRemoveCourse = async () => {
+    if (!db) return;
+    await coursesRepo.remove(db, course.id);
+    bump();
+    await rescheduleNotifications();
+    router.back();
   };
 
   return (
     <Screen>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+        {confirmDelete ? (
+          <Card style={{ borderColor: '#ff6b6b', borderWidth: 2, marginBottom: 16 }}>
+            <Title style={{ color: '#ff6b6b', marginBottom: 8 }}>Delete this course?</Title>
+            <Body secondary style={{ marginBottom: 12 }}>
+              All sessions, absences, resources, and plans for it will be removed. This cannot be undone.
+            </Body>
+            <Row style={{ gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Button label="Cancel" onPress={() => setConfirmDelete(false)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button label="Delete" kind="danger-outline" onPress={confirmRemoveCourse} />
+              </View>
+            </Row>
+          </Card>
+        ) : null}
+        {confirmRemoveResource ? (
+          <Card style={{ borderColor: '#ff6b6b', borderWidth: 2, marginBottom: 16 }}>
+            <Title style={{ color: '#ff6b6b', marginBottom: 8 }}>Remove resource?</Title>
+            <Body secondary style={{ marginBottom: 12 }}>
+              {confirmRemoveResource.title}
+            </Body>
+            <Row style={{ gap: 8 }}>
+              <View style={{ flex: 1 }}>
+                <Button label="Cancel" onPress={() => setConfirmRemoveResource(null)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button label="Remove" kind="danger-outline" onPress={confirmRemoveResourceAction} />
+              </View>
+            </Row>
+          </Card>
+        ) : null}
         <Title>
           {course.code} · {course.name}
         </Title>

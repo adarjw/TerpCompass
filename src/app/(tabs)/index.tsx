@@ -4,7 +4,7 @@
  * attendance importance, actions. Color only where it means something.
  */
 
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Animated, Easing, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -74,19 +74,34 @@ const WALK_START_OPTIONS: WalkStartPoint[] = [
 export default function HomeScreen() {
   const { db, ready, initError, settings, version, bump, rescheduleNotifications, saveSettings } = useApp();
   const c = useColors();
+  const params = useLocalSearchParams();
   const [data, setData] = useState<HomeData | null>(null);
   const [now, setNow] = useState(new Date());
   const [error, setError] = useState<string | null>(null);
+  const [countdownStartTime, setCountdownStartTime] = useState<Date | null>(() => {
+    const startTimeStr = params.showCountdown;
+    if (startTimeStr && typeof startTimeStr === 'string') {
+      try {
+        const startTime = new Date(decodeURIComponent(startTimeStr));
+        if (!Number.isNaN(startTime.getTime())) return startTime;
+      } catch {
+        // Ignore invalid date strings
+      }
+    }
+    return null;
+  });
   // Hides the welcome modal the instant it's dismissed rather than waiting
   // on the settings save round-trip (which would otherwise let it flash
   // back into view during a route transition started by the same tap).
   const [welcomeDismissedLocally, setWelcomeDismissedLocally] = useState(false);
 
-  // Tick the countdown every 30 seconds.
+  // Tick the countdown every 30 seconds, or every 5 seconds if showing a countdown timer.
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30000);
+    const interval = countdownStartTime ? 5000 : 30000;
+    const t = setInterval(() => setNow(new Date()), interval);
     return () => clearInterval(t);
-  }, []);
+  }, [countdownStartTime]);
+
 
   const load = useCallback(async () => {
     if (!db) return;
@@ -236,6 +251,14 @@ export default function HomeScreen() {
           <View style={{ height: 10 }} />
         )}
         {error ? <ErrorBox message={error} /> : null}
+
+        {countdownStartTime ? (
+          <ClassCountdownCard
+            startTime={countdownStartTime}
+            now={now}
+            onDismiss={() => setCountdownStartTime(null)}
+          />
+        ) : null}
 
         {!data.hasCourses ? (
           <>
@@ -650,6 +673,53 @@ function FocusCard({
         )}
       </Card>
     </View>
+  );
+}
+
+/** Countdown timer card shown when a notification with a class time is clicked. */
+function ClassCountdownCard({
+  startTime,
+  now,
+  onDismiss,
+}: {
+  startTime: Date;
+  now: Date;
+  onDismiss: () => void;
+}) {
+  const c = useColors();
+  const msUntilStart = startTime.getTime() - now.getTime();
+  const minsUntilStart = Math.ceil(msUntilStart / 60000);
+  const isClass = msUntilStart >= 0;
+
+  return (
+    <Card style={{ backgroundColor: c.subtle, marginBottom: 12 }}>
+      <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary, marginBottom: 2 }}>
+            {isClass ? 'Class starts in' : 'Class started'}
+          </Text>
+          <Text
+            style={{
+              fontFamily: FONT.black,
+              fontSize: 32,
+              color: isClass ? c.accent : c.danger,
+            }}>
+            {isClass ? minsUntilStart : 'Now'}
+          </Text>
+          {isClass ? (
+            <Text style={{ fontFamily: FONT.regular, fontSize: 13, color: c.textSecondary, marginTop: 2 }}>
+              minute{minsUntilStart === 1 ? '' : 's'}
+            </Text>
+          ) : null}
+        </View>
+        <Button
+          label="Done"
+          kind="secondary"
+          compact
+          onPress={onDismiss}
+        />
+      </Row>
+    </Card>
   );
 }
 
