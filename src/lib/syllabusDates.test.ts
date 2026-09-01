@@ -166,6 +166,39 @@ describe('detectSyllabusEvents', () => {
     expect(events).toHaveLength(0);
   });
 
+  it('does not borrow "final" from an unrelated attendance-policy sentence', () => {
+    // Regression: found via manual testing against the demo syllabus. A
+    // "Midterm review session" chunk (correctly not an exam on its own) sat
+    // two chunks away from an attendance-policy line mentioning "10% of the
+    // final grade" — an unrelated use of "final". The neighbor fallback
+    // must not borrow it and misclassify the review session as an exam.
+    const events = detectSyllabusEvents([
+      chunk({ text: '2026-09-08: Signals. Read Chapter 8.', detectedDate: '2026-09-08', ordinal: 1 }),
+      chunk({
+        text: '2026-09-10: Midterm review session. Attendance strongly recommended.',
+        detectedDate: '2026-09-10',
+        ordinal: 2,
+      }),
+      chunk({ text: '2026-09-13: Midterm exam in class.', detectedDate: '2026-09-13', ordinal: 3 }),
+      chunk({
+        text: 'Attendance policy: In-class exercises count 10% of the final grade. No make-ups.',
+        detectedDate: null,
+        ordinal: 4,
+      }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].dateISO).toBe('2026-09-13');
+  });
+
+  it('does not borrow a bare "due" from unrelated policy text', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '10/1', detectedDate: '2026-10-01', ordinal: 1 }),
+      chunk({ text: 'Guest lecture on compilers', detectedDate: null, ordinal: 2 }),
+      chunk({ text: 'Late work is due within 48 hours of the original deadline.', detectedDate: null, ordinal: 3 }),
+    ]);
+    expect(events).toHaveLength(0);
+  });
+
   it('keeps neighbor matching scoped to chunks from the same resource', () => {
     const events = detectSyllabusEvents([
       chunk({ text: '10/15', detectedDate: '2026-10-15', ordinal: 1, resourceId: 'rA' }),

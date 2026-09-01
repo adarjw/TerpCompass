@@ -34,8 +34,29 @@ const KIND_PATTERNS: { kind: SyllabusEventKind; pattern: RegExp }[] = [
   },
 ];
 
-function classifyKind(text: string): SyllabusEventKind | null {
-  for (const { kind, pattern } of KIND_PATTERNS) {
+// Used only when borrowing a keyword from a *neighboring* chunk (see
+// findNeighborKeywordText below), where the match is inherently less
+// reliable than one on the dated line itself. Bare "midterm"/"final" and a
+// bare "due" are dropped here: caught by manual testing, a syllabus's
+// attendance-policy paragraph mentioning "10% of the final grade" sitting
+// two chunks away from an unrelated date was enough to misclassify it as
+// an exam. Same reasoning would apply to a stray "due" in policy text like
+// "late work is due within 48 hours." Only the specific, low-ambiguity
+// keywords are trusted to jump across chunks.
+const NEIGHBOR_KIND_PATTERNS: { kind: SyllabusEventKind; pattern: RegExp }[] = [
+  { kind: 'exam', pattern: /\bexam\b/i },
+  { kind: 'quiz', pattern: /\b(quiz|test)\b/i },
+  {
+    kind: 'homework',
+    pattern: /\b(project|paper|assignment|problem set|pset|hw|homework)\s*(#?\d+)?\s*(is\s+)?due\b/i,
+  },
+];
+
+function classifyKind(
+  text: string,
+  patterns: { kind: SyllabusEventKind; pattern: RegExp }[] = KIND_PATTERNS,
+): SyllabusEventKind | null {
+  for (const { kind, pattern } of patterns) {
     if (pattern.test(text)) return kind;
   }
   return null;
@@ -78,9 +99,13 @@ function findNeighborKeywordText(
 ): string | null {
   for (let offset = 1; offset <= NEIGHBOR_WINDOW; offset++) {
     const before = ordered[index - offset];
-    if (before && !before.detectedDate && classifyKind(before.text)) return before.text;
+    if (before && !before.detectedDate && classifyKind(before.text, NEIGHBOR_KIND_PATTERNS)) {
+      return before.text;
+    }
     const after = ordered[index + offset];
-    if (after && !after.detectedDate && classifyKind(after.text)) return after.text;
+    if (after && !after.detectedDate && classifyKind(after.text, NEIGHBOR_KIND_PATTERNS)) {
+      return after.text;
+    }
   }
   return null;
 }
@@ -124,7 +149,7 @@ export function detectSyllabusEvents(chunks: ResourceChunk[]): DetectedSyllabusE
 
       const neighborText = findNeighborKeywordText(ordered, i);
       if (!neighborText) continue;
-      const neighborKind = classifyKind(neighborText);
+      const neighborKind = classifyKind(neighborText, NEIGHBOR_KIND_PATTERNS);
       if (!neighborKind) continue;
       out.push({
         kind: neighborKind,

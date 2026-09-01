@@ -92,18 +92,30 @@ a *different*, separately-dated schedule row is never misattributed.
 
 This narrows, but doesn't eliminate, real gaps: a date and its keyword more
 than 2 chunks apart, or a genuinely undated reference ("the exam" without a
-date anywhere nearby), still won't match — nothing here invents a date, so
-the failure mode is a silently missing entry, never a wrong one. A quirk
-worth knowing: "Midterm review session" is deliberately *not* classified as
-the exam itself (the actual exam has its own dated line) — only text that
-says "review" right after "midterm"/"final" is excluded, so "Midterm exam"
-and "Final review" still both match normally.
+date anywhere nearby), still won't match.
+
+Borrowing a keyword across chunks is inherently riskier than matching it on
+the dated line itself, so the cross-chunk fallback uses a **stricter**
+keyword set than direct matching does (`NEIGHBOR_KIND_PATTERNS` vs
+`KIND_PATTERNS`) — found the hard way: testing against the demo syllabus, a
+"Midterm review session" line sat two chunks away from an attendance-policy
+sentence mentioning "10% of the **final** grade," and the fallback initially
+borrowed that unrelated "final" and misclassified the review session as an
+exam. Bare "midterm"/"final" and a bare "due" are only trusted for a direct,
+same-line match now — cross-chunk matching requires the less ambiguous
+"exam", "quiz"/"test", or an explicit "problem set/homework/project ... due"
+phrase. A quirk worth knowing on direct matches: "Midterm review session" is
+deliberately *not* classified as the exam itself (the actual exam has its
+own dated line) — only text that says "review" right after "midterm"/"final"
+is excluded, so "Midterm exam" and "Final review" still both match normally.
 
 Nothing is added to your calendar automatically. Each detected item has its
 own **"Add to calendar"** button (writes one `calendar_events` row); once
 added, that item is recognized by its generated title+date and drops off the
 "detected" list so it isn't shown twice — it simply moves up into the
-existing "Upcoming exams & deadlines" card above it.
+existing "Upcoming exams & deadlines" card above it. This same detector also
+appears scoped to a single course on that course's own detail page, under
+**"Quizzes, exams & homework (from syllabus)"**.
 
 ## Multi-section courses
 

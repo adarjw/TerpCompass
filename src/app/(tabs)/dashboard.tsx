@@ -111,12 +111,15 @@ export default function DashboardScreen() {
   // Quiz/exam/homework dates auto-detected from uploaded syllabi. A student
   // may have already added the same date via .ics import or a manual
   // calendar entry — skip anything whose generated title+date already
-  // exists on the calendar rather than showing it twice.
+  // exists on the calendar rather than showing it twice. No count cap here
+  // (unlike upcomingEvents' preview slice above): a syllabus with frequent
+  // quizzes/homework can easily have more entries between "now" and a few
+  // weeks out than a small cap would show, silently hiding everything past
+  // it even though it's still genuinely upcoming.
   const existingEventKeys = new Set(data.events.map((e) => `${e.date}|${e.title}`));
   const upcomingSyllabusEvents = detectSyllabusEvents(data.chunks)
     .filter((e) => compareISODate(e.dateISO, today) >= 0)
-    .filter((e) => !existingEventKeys.has(`${e.dateISO}|${titleFor(byId.get(e.courseId), e)}`))
-    .slice(0, 8);
+    .filter((e) => !existingEventKeys.has(`${e.dateISO}|${titleFor(byId.get(e.courseId), e)}`));
 
   const addSyllabusEventToCalendar = async (event: DetectedSyllabusEvent) => {
     if (!db) return;
