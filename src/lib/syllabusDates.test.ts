@@ -103,6 +103,77 @@ describe('detectSyllabusEvents', () => {
     });
   });
 
+  it('detects an exam from a two-line "date / description" list item', () => {
+    // A common "Important Dates" list format: the date and the event
+    // description are separate bullet lines, not one schedule-row line.
+    const events = detectSyllabusEvents([
+      chunk({ text: '10/15', detectedDate: '2026-10-15', ordinal: 1 }),
+      chunk({ text: 'Midterm Exam', detectedDate: null, ordinal: 2 }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ kind: 'exam', dateISO: '2026-10-15' });
+  });
+
+  it('detects an exam from a sentence hard-wrapped across lines (keyword before the date)', () => {
+    // PDF text extraction often preserves visual line wraps, splitting one
+    // sentence into separate chunks: the keyword lands in the line before
+    // the one bearing the date.
+    const events = detectSyllabusEvents([
+      chunk({ text: 'The final exam is scheduled for', detectedDate: null, ordinal: 1 }),
+      chunk({ text: 'December 15th at 2:00 PM in the usual room.', detectedDate: '2026-12-15', ordinal: 2 }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ kind: 'exam', dateISO: '2026-12-15' });
+  });
+
+  it('derives a topic from the neighboring line when the dated line has none', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '10/15', detectedDate: '2026-10-15', detectedTopic: null, ordinal: 1 }),
+      chunk({ text: 'Midterm Exam', detectedDate: null, ordinal: 2 }),
+    ]);
+    expect(events[0].topic).toBe('Midterm Exam');
+  });
+
+  it('does not misattribute a keyword to an unrelated adjacent dated chunk', () => {
+    // Two back-to-back schedule rows, each with its own date — the
+    // keyword-less first row must not borrow "exam" from the second row's
+    // own, separately-dated event.
+    const events = detectSyllabusEvents([
+      chunk({ text: '2026-09-10: Discussion section', detectedDate: '2026-09-10', ordinal: 1 }),
+      chunk({ text: '2026-09-13: Midterm exam', detectedDate: '2026-09-13', ordinal: 2 }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].dateISO).toBe('2026-09-13');
+  });
+
+  it('matches a keyword two chunks away (within the neighbor window)', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '10/15', detectedDate: '2026-10-15', ordinal: 1 }),
+      chunk({ text: '(in the usual classroom)', detectedDate: null, ordinal: 2 }),
+      chunk({ text: 'Final Exam', detectedDate: null, ordinal: 3 }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('exam');
+  });
+
+  it('does not match a keyword three chunks away (outside the neighbor window)', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '10/15', detectedDate: '2026-10-15', ordinal: 1 }),
+      chunk({ text: 'filler one', detectedDate: null, ordinal: 2 }),
+      chunk({ text: 'filler two', detectedDate: null, ordinal: 3 }),
+      chunk({ text: 'Final Exam', detectedDate: null, ordinal: 4 }),
+    ]);
+    expect(events).toHaveLength(0);
+  });
+
+  it('keeps neighbor matching scoped to chunks from the same resource', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '10/15', detectedDate: '2026-10-15', ordinal: 1, resourceId: 'rA' }),
+      chunk({ text: 'Midterm Exam', detectedDate: null, ordinal: 2, resourceId: 'rB' }),
+    ]);
+    expect(events).toHaveLength(0);
+  });
+
   it('sorts multiple events soonest first', () => {
     const events = detectSyllabusEvents([
       chunk({ text: '2026-12-10: Final exam', detectedDate: '2026-12-10' }),

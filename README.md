@@ -78,10 +78,26 @@ project/assignment/problem-set "due" — on the same line as a detected date,
 classifying it as **Exam**, **Quiz**, or **Homework/Project**. Matches show
 up in the Dashboard's **"Detected from your syllabi"** card with the source
 filename and page cited, same as everywhere else detected content is shown.
-A quirk worth knowing: "Midterm review session" is deliberately *not*
-classified as the exam itself (the actual exam has its own dated line) —
-only text that says "review" right after "midterm"/"final" is excluded, so
-"Midterm exam" and "Final review" still both match normally.
+
+Real syllabi format dates and event descriptions inconsistently, so there's
+a windowed fallback: `chunkResourceText` isolates any date-bearing line into
+its own small chunk, which means a two-line "Important Dates" list item
+("10/15" on one line, "Midterm Exam" on the next) or a sentence hard-wrapped
+across lines by PDF extraction ("The final exam is scheduled for\nDecember
+15th...") splits the date and the keyword into separate chunks that would
+otherwise never be compared. `detectSyllabusEvents` looks up to 2 chunks
+either side, within the same resource, for a keyword — but only in
+neighbors that have no detected date of their own, so a date sitting next to
+a *different*, separately-dated schedule row is never misattributed.
+
+This narrows, but doesn't eliminate, real gaps: a date and its keyword more
+than 2 chunks apart, or a genuinely undated reference ("the exam" without a
+date anywhere nearby), still won't match — nothing here invents a date, so
+the failure mode is a silently missing entry, never a wrong one. A quirk
+worth knowing: "Midterm review session" is deliberately *not* classified as
+the exam itself (the actual exam has its own dated line) — only text that
+says "review" right after "midterm"/"final" is excluded, so "Midterm exam"
+and "Final review" still both match normally.
 
 Nothing is added to your calendar automatically. Each detected item has its
 own **"Add to calendar"** button (writes one `calendar_events` row); once
