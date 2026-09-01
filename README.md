@@ -69,6 +69,26 @@ automatically (`previous_class` when today has an earlier class ending
 within ~30 min beforehand, `dorm` otherwise) — it never guesses which of the
 other locations you're currently at.
 
+## Quiz/exam/homework dates from your syllabus
+
+Uploading a syllabus already extracts dated schedule lines into chunks
+(`src/lib/syllabus.ts#chunkResourceText`); `src/lib/syllabusDates.ts` scans
+those chunks for a keyword — exam/midterm/final, quiz/test, or a
+project/assignment/problem-set "due" — on the same line as a detected date,
+classifying it as **Exam**, **Quiz**, or **Homework/Project**. Matches show
+up in the Dashboard's **"Detected from your syllabi"** card with the source
+filename and page cited, same as everywhere else detected content is shown.
+A quirk worth knowing: "Midterm review session" is deliberately *not*
+classified as the exam itself (the actual exam has its own dated line) —
+only text that says "review" right after "midterm"/"final" is excluded, so
+"Midterm exam" and "Final review" still both match normally.
+
+Nothing is added to your calendar automatically. Each detected item has its
+own **"Add to calendar"** button (writes one `calendar_events` row); once
+added, that item is recognized by its generated title+date and drops off the
+"detected" list so it isn't shown twice — it simply moves up into the
+existing "Upcoming exams & deadlines" card above it.
+
 ## Multi-section courses
 
 A course can have more than one meeting pattern — e.g. a Lecture plus a
@@ -154,6 +174,7 @@ can generate richer catch-up plans, quizzes, and summaries — but:
 | AI provider abstraction (local + opt-in CLI) | `src/lib/ai/` |
 | Email / cancellation detection | `src/lib/email.ts`, `src/app/email.tsx` |
 | Dashboard (missed classes, open plans, repeated topics) | `src/app/(tabs)/dashboard.tsx` |
+| Quiz/exam/homework dates detected from syllabi | `src/lib/syllabusDates.ts` |
 | JSON backup / restore, delete-all-data | `src/lib/backup.ts`, `src/app/(tabs)/settings.tsx` |
 | Absence-notice email drafts (5 reason templates, mailto: hand-off) | `src/lib/emailDrafts.ts` |
 | Timestamped class notes per session | `src/app/session/[id].tsx` |
