@@ -33,6 +33,7 @@ import {
   type CalendarEvent,
 } from '@/db/repo';
 import { findBuilding } from '@/lib/campus';
+import { prefersAppleMapsForCurrentDevice } from '@/lib/browserEnv';
 import type { DetectedContacts } from '@/lib/syllabus';
 import {
   compareSyllabusEventPriority,
@@ -330,7 +331,11 @@ export default function CourseScreen() {
                   label="Directions"
                   kind="ghost"
                   compact
-                  onPress={() => Linking.openURL(bestMapUrl(loc, where || course.code, Platform.OS === 'ios'))}
+                  onPress={() =>
+                    Linking.openURL(
+                      bestMapUrl(loc, where || course.code, prefersAppleMapsForCurrentDevice(Platform.OS)),
+                    )
+                  }
                 />
               </Row>
             );
