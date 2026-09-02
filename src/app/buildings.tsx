@@ -17,6 +17,7 @@ import {
   FONT,
 } from '@/components/ui';
 import { locationsRepo } from '@/db/repo';
+import { prefersAppleMapsForCurrentDevice } from '@/lib/browserEnv';
 import { makeId } from '@/lib/ids';
 import type { CampusLocation } from '@/lib/types';
 import { bestMapUrl } from '@/lib/walking';
@@ -181,7 +182,9 @@ export default function BuildingsScreen() {
                     kind="tonal"
                     compact
                     icon="navigate-outline"
-                    onPress={() => Linking.openURL(bestMapUrl(loc, loc.name, Platform.OS === 'ios'))}
+                    onPress={() =>
+                      Linking.openURL(bestMapUrl(loc, loc.name, prefersAppleMapsForCurrentDevice(Platform.OS)))
+                    }
                   />
                 </View>
                 <View style={{ flex: 1, maxWidth: 150 }}>

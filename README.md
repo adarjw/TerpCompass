@@ -161,6 +161,20 @@ opens Apple Maps on iOS or Google Maps everywhere else
 (`src/lib/walking.ts#bestMapUrl`), using stored building coordinates when
 available or falling back to a named search near UMD.
 
+Which link to use is decided by `src/lib/browserEnv.ts#prefersAppleMaps`,
+not a bare `Platform.OS === 'ios'` check — that check alone only catches the
+native app build. On the web build (including the installed PWA),
+`Platform.OS` is always `'web'`, even on an iPhone, so it would send every
+iPhone PWA user to a Google Maps *universal link* instead. That link doesn't
+always hand off cleanly to the installed Google Maps app from inside a
+standalone PWA's browsing context; it can land on the maps.google.com
+website instead, and the destination is lost if the user then switches to
+the app manually. `prefersAppleMaps` falls back to UA-sniffing (the same
+`isAppleTouchDevice` used for the Add-to-Home-Screen prompt) when
+`Platform.OS === 'web'`, so an iPhone gets Apple Maps' `maps.apple.com`
+scheme regardless of which build it's running — a first-party OS-level
+handler that doesn't have this failure mode.
+
 ## What works without any AI / API keys
 
 Everything. The entire app — schedule import, the home "where am I supposed

@@ -46,3 +46,37 @@ export function shouldOfferAddToHomeScreen(env: BrowserEnv): boolean {
 export function shouldOfferSafariRedirect(env: BrowserEnv): boolean {
   return isAppleTouchDevice(env) && !isSafariEngine(env.userAgent) && !env.isStandalone;
 }
+
+/**
+ * True when a "Directions" tap should open Apple Maps instead of Google
+ * Maps. `Platform.OS === 'ios'` alone only catches the native app build —
+ * on the web build (including the installed PWA), Platform.OS is always
+ * 'web', even on an iPhone, so that check alone sends every iPhone PWA
+ * user to a Google Maps *universal link* instead. That link doesn't always
+ * hand off cleanly to the installed Google Maps app from inside a
+ * standalone PWA context; it can land on the maps.google.com website
+ * instead, and the destination gets lost if the user then switches to the
+ * app manually. Apple Maps' maps.apple.com scheme is a first-party OS-level
+ * handler, not a universal link needing verification, so it doesn't have
+ * this failure mode — worth using whenever the device is actually an
+ * iPhone/iPad, regardless of which build is running.
+ */
+export function prefersAppleMaps(
+  platformOS: string,
+  env: Pick<BrowserEnv, 'userAgent' | 'maxTouchPoints' | 'platform'>,
+): boolean {
+  if (platformOS === 'ios') return true;
+  if (platformOS !== 'web') return false;
+  return isAppleTouchDevice(env);
+}
+
+/** Convenience wrapper reading `navigator` directly — trivial glue, not
+ * unit-tested itself; `prefersAppleMaps` above carries the actual logic. */
+export function prefersAppleMapsForCurrentDevice(platformOS: string): boolean {
+  if (typeof navigator === 'undefined') return platformOS === 'ios';
+  return prefersAppleMaps(platformOS, {
+    userAgent: navigator.userAgent,
+    maxTouchPoints: navigator.maxTouchPoints ?? 0,
+    platform: navigator.platform ?? '',
+  });
+}

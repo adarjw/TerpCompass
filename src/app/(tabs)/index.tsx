@@ -37,6 +37,7 @@ import {
 } from '@/db/repo';
 import { loadDemoData } from '@/db/seed';
 import { findBuilding } from '@/lib/campus';
+import { prefersAppleMapsForCurrentDevice } from '@/lib/browserEnv';
 import { makeId } from '@/lib/ids';
 import { IMPORTANCE_LABEL, scoreSessionImportance } from '@/lib/importance';
 import { sessionEnd, sessionsOn, sessionStart, whereShouldIBe, type SessionWithCourse } from '@/lib/sessions';
@@ -424,7 +425,7 @@ function FocusCard({
   const daysAway = Math.ceil(msUntilStart / 86400000);
 
   const openDirections = () => {
-    Linking.openURL(bestMapUrl(loc, building || course.code, Platform.OS === 'ios'));
+    Linking.openURL(bestMapUrl(loc, building || course.code, prefersAppleMapsForCurrentDevice(Platform.OS)));
   };
 
   // Progressive urgency for the header's right side: far-off classes stay

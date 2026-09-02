@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isMobileSafari, shouldOfferAddToHomeScreen, shouldOfferSafariRedirect } from './browserEnv';
+import {
+  isMobileSafari,
+  prefersAppleMaps,
+  shouldOfferAddToHomeScreen,
+  shouldOfferSafariRedirect,
+} from './browserEnv';
 
 const IPHONE_SAFARI =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1';
@@ -76,5 +81,38 @@ describe('shouldOfferSafariRedirect', () => {
     expect(
       shouldOfferSafariRedirect({ userAgent: ANDROID_CHROME, maxTouchPoints: 5, platform: 'Linux armv8l', isStandalone: false }),
     ).toBe(false);
+  });
+});
+
+describe('prefersAppleMaps', () => {
+  it('is true on the native iOS build regardless of device signals', () => {
+    expect(prefersAppleMaps('ios', { userAgent: '', maxTouchPoints: 0, platform: '' })).toBe(true);
+  });
+
+  it('is true on the web build running on an iPhone', () => {
+    // Regression: Platform.OS === 'ios' alone never catches this case,
+    // since Platform.OS is always 'web' on the web build (including the
+    // installed PWA) even when the device is an iPhone — the app was
+    // sending iPhone PWA users to a Google Maps universal link that could
+    // fail to hand off to the installed app cleanly.
+    expect(
+      prefersAppleMaps('web', { userAgent: IPHONE_SAFARI, maxTouchPoints: 5, platform: 'iPhone' }),
+    ).toBe(true);
+  });
+
+  it('is true on the web build running on an iPhone with a non-Safari browser', () => {
+    expect(
+      prefersAppleMaps('web', { userAgent: IPHONE_CHROME, maxTouchPoints: 5, platform: 'iPhone' }),
+    ).toBe(true);
+  });
+
+  it('is false on the web build running on Android', () => {
+    expect(
+      prefersAppleMaps('web', { userAgent: ANDROID_CHROME, maxTouchPoints: 5, platform: 'Linux armv8l' }),
+    ).toBe(false);
+  });
+
+  it('is false on the native android build', () => {
+    expect(prefersAppleMaps('android', { userAgent: '', maxTouchPoints: 0, platform: '' })).toBe(false);
   });
 });
