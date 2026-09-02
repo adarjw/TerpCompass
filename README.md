@@ -79,6 +79,27 @@ classifying it as **Exam**, **Quiz**, or **Homework/Project**. Matches show
 up in the Dashboard's **"Detected from your syllabi"** card with the source
 filename and page cited, same as everywhere else detected content is shown.
 
+**Table-shaped schedules in a PDF** — the most common real-world syllabus
+format — get special handling in `src/lib/pdf.ts#textFromContentStream`.
+PDF text is laid out via positioning operators (`Td`/`TD`, "move to the next
+text position by (tx, ty)"); the extractor used to treat every one of those
+moves as a line break, which flattens an entire table row — header included
+— into one run of text with no column boundaries. It now distinguishes a
+horizontal-only move (`ty ≈ 0`, the common way a simple PDF generator lays
+out one row's cells) from a real line break (nonzero `ty`), so each row
+survives as its own line with its cells still separated by `" | "` (e.g.
+`"Sept 21-Sept 25 | 9.1, 9.2 | Quiz 2 | Matlab 1 due Monday Sept 21
+(online)"`) instead of every row losing its column identity — a header
+row's labels no longer bleed into the data rows below it, and
+`detectSyllabusEvents` checks each `" | "`-separated cell independently, so
+a row with *two* real events in different columns (a quiz **and** a
+separate homework deadline) reports both instead of only the first keyword
+found in the flattened blob. This is a heuristic tied to how the PDF was
+generated, not real layout parsing: PDFs that position every cell with an
+absolute text matrix (`Tm`) instead of relative `Td` moves don't match the
+pattern and fall back to the pre-existing (non-table-aware) behavior
+unchanged — still no worse than before, just no better either.
+
 Real syllabi format dates and event descriptions inconsistently, so there's
 a windowed fallback: `chunkResourceText` isolates any date-bearing line into
 its own small chunk, which means a two-line "Important Dates" list item
