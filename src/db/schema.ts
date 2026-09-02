@@ -1,6 +1,6 @@
 /** SQLite DDL. Version-gated so future migrations are additive. */
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS courses (
@@ -189,6 +189,16 @@ CREATE TABLE IF NOT EXISTS sandbox_blobs (
   mime_type TEXT NOT NULL,
   bytes BLOB NOT NULL,
   created_at TEXT NOT NULL
+);
+
+-- Tracks which auto-detected syllabus quiz/exam/homework items (see
+-- src/lib/syllabusDates.ts) the student has checked off. Keyed by the
+-- resource chunk id the item was detected from, since detected items aren't
+-- otherwise persisted as rows of their own — they're recomputed from
+-- extracted_resource_chunks on every read.
+CREATE TABLE IF NOT EXISTS syllabus_event_completions (
+  chunk_id TEXT PRIMARY KEY REFERENCES extracted_resource_chunks(id) ON DELETE CASCADE,
+  completed_at TEXT NOT NULL
 );
 `;
 

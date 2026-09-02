@@ -10,7 +10,6 @@ import { Pressable, ScrollView, View } from 'react-native';
 import {
   Badge,
   Body,
-  Button,
   Card,
   EmptyState,
   FONT,
@@ -20,17 +19,24 @@ import {
   Screen,
   Subtitle,
 } from '@/components/ui';
+import { SyllabusEventCard } from '@/components/SyllabusEventCard';
 import {
   absencesRepo,
   chunksRepo,
   coursesRepo,
   eventsRepo,
   plansRepo,
+  syllabusCompletionsRepo,
   tasksRepo,
   type CalendarEvent,
 } from '@/db/repo';
-import { detectSyllabusEvents, SYLLABUS_EVENT_LABEL, type DetectedSyllabusEvent } from '@/lib/syllabusDates';
-import { compareISODate, formatDateHuman, toISODate } from '@/lib/time';
+import {
+  compareSyllabusEventPriority,
+  detectSyllabusEvents,
+  SYLLABUS_EVENT_LABEL,
+  type DetectedSyllabusEvent,
+} from '@/lib/syllabusDates';
+import { compareISODate, formatDateHuman, isSameWeek, toISODate } from '@/lib/time';
 import type { Absence, CatchUpPlan, CatchUpTask, Course, ResourceChunk } from '@/lib/types';
 import { useApp } from '@/state/AppContext';
 
@@ -41,6 +47,7 @@ interface DashData {
   tasks: CatchUpTask[];
   events: CalendarEvent[];
   chunks: ResourceChunk[];
+  doneChunkIds: Set<string>;
 }
 
 /** Same title format used both to insert a calendar event and to detect
@@ -55,20 +62,29 @@ function titleFor(course: Course | undefined, event: DetectedSyllabusEvent): str
 export default function DashboardScreen() {
   const { db, version, bump } = useApp();
   const [data, setData] = useState<DashData | null>(null);
+  const [collapsedCourseIds, setCollapsedCourseIds] = useState<Set<string>>(new Set());
+  const toggleCourseCollapsed = (courseId: string) =>
+    setCollapsedCourseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(courseId)) next.delete(courseId);
+      else next.add(courseId);
+      return next;
+    });
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
         if (!db) return;
-        const [courses, absences, plans, tasks, events, chunks] = await Promise.all([
+        const [courses, absences, plans, tasks, events, chunks, doneChunkIds] = await Promise.all([
           coursesRepo.all(db),
           absencesRepo.all(db),
           plansRepo.all(db),
           tasksRepo.all(db),
           eventsRepo.all(db),
           chunksRepo.all(db),
+          syllabusCompletionsRepo.all(db),
         ]);
-        setData({ courses, absences, plans, tasks, events, chunks });
+        setData({ courses, absences, plans, tasks, events, chunks, doneChunkIds });
       })();
       // eslint-disable-next-line react-hooks/exhaustive-deps -- version bumps trigger a reload
     }, [db, version]),
@@ -108,17 +124,15 @@ export default function DashboardScreen() {
     .filter((e) => compareISODate(e.date, today) >= 0)
     .slice(0, 6);
 
-  // Quiz/exam/homework dates auto-detected from uploaded syllabi. A student
-  // may have already added the same date via .ics import or a manual
-  // calendar entry — skip anything whose generated title+date already
-  // exists on the calendar rather than showing it twice. No count cap here
-  // (unlike upcomingEvents' preview slice above): a syllabus with frequent
-  // quizzes/homework can easily have more entries between "now" and a few
-  // weeks out than a small cap would show, silently hiding everything past
-  // it even though it's still genuinely upcoming.
+  // Quiz/exam/homework dates auto-detected from uploaded syllabi. Scoped to
+  // the current Mon-Sun week only — a syllabus with frequent quizzes/
+  // homework could otherwise fill the whole semester's worth of cards at
+  // once. A student may have already added the same date via .ics import
+  // or a manual calendar entry — skip anything whose generated title+date
+  // already exists on the calendar rather than showing it twice.
   const existingEventKeys = new Set(data.events.map((e) => `${e.date}|${e.title}`));
-  const upcomingSyllabusEvents = detectSyllabusEvents(data.chunks)
-    .filter((e) => compareISODate(e.dateISO, today) >= 0)
+  const thisWeekSyllabusEvents = detectSyllabusEvents(data.chunks)
+    .filter((e) => isSameWeek(e.dateISO, today))
     .filter((e) => !existingEventKeys.has(`${e.dateISO}|${titleFor(byId.get(e.courseId), e)}`));
 
   const addSyllabusEventToCalendar = async (event: DetectedSyllabusEvent) => {
@@ -134,6 +148,31 @@ export default function DashboardScreen() {
     bump();
   };
 
+  const toggleSyllabusEventDone = async (event: DetectedSyllabusEvent) => {
+    if (!db) return;
+    await syllabusCompletionsRepo.setDone(db, event.chunkId, !data.doneChunkIds.has(event.chunkId));
+    bump();
+  };
+
+  // Grouped per class so a week with several courses reads as one section
+  // per class rather than one long, unordered list. Each group is sorted
+  // by priority internally (exam > quiz > homework, then soonest date —
+  // see compareSyllabusEventPriority), and the groups themselves are
+  // ordered by their own most urgent item, so a class with an exam this
+  // week surfaces above one with only a problem set due.
+  const syllabusEventsByCourse = new Map<string, DetectedSyllabusEvent[]>();
+  for (const e of thisWeekSyllabusEvents) {
+    const list = syllabusEventsByCourse.get(e.courseId);
+    if (list) list.push(e);
+    else syllabusEventsByCourse.set(e.courseId, [e]);
+  }
+  const syllabusEventGroups = [...syllabusEventsByCourse.entries()]
+    .map(([courseId, events]) => ({
+      courseId,
+      events: [...events].sort(compareSyllabusEventPriority),
+    }))
+    .sort((a, b) => compareSyllabusEventPriority(a.events[0], b.events[0]));
+
   // "Tonight": open plans ordered by most recent absence first.
   const tonight = openPlans.slice(0, 3);
 
@@ -143,7 +182,7 @@ export default function DashboardScreen() {
         {data.absences.length === 0 &&
         openPlans.length === 0 &&
         upcomingEvents.length === 0 &&
-        upcomingSyllabusEvents.length === 0 ? (
+        thisWeekSyllabusEvents.length === 0 ? (
           <EmptyState
             title="All caught up"
             hint="Missed classes, catch-up plans, and exam/quiz/homework dates from your syllabi will show up here."
@@ -233,36 +272,41 @@ export default function DashboardScreen() {
           </>
         ) : null}
 
-        {upcomingSyllabusEvents.length > 0 ? (
+        {thisWeekSyllabusEvents.length > 0 ? (
           <>
-            <Subtitle>Detected from your syllabi</Subtitle>
-            {upcomingSyllabusEvents.map((e) => {
-              const course = byId.get(e.courseId);
+            <Subtitle>This week, from your syllabi</Subtitle>
+            {syllabusEventGroups.map(({ courseId, events }) => {
+              const course = byId.get(courseId);
+              const collapsed = collapsedCourseIds.has(courseId);
               return (
-                <Card key={e.chunkId} style={{ paddingVertical: 12 }}>
-                  <Row style={{ justifyContent: 'space-between' }}>
-                    <View style={{ flex: 1 }}>
-                      <Row style={{ gap: 8, marginBottom: 2 }}>
-                        <Body style={{ fontFamily: FONT.bold }}>{course?.code ?? '?'}</Body>
-                        <Badge
-                          label={SYLLABUS_EVENT_LABEL[e.kind]}
-                          tone={e.kind === 'exam' ? 'danger' : e.kind === 'quiz' ? 'warning' : 'neutral'}
+                <View key={courseId} style={{ marginBottom: 8 }}>
+                  <Pressable
+                    onPress={() => toggleCourseCollapsed(courseId)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: !collapsed }}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                      paddingVertical: 6,
+                      paddingHorizontal: 2,
+                    }}>
+                    <Icon name={collapsed ? 'chevron-forward' : 'chevron-down'} size={16} />
+                    <Body style={{ fontFamily: FONT.bold, flex: 1 }}>{course?.code ?? '?'}</Body>
+                    <Badge label={`${events.length}`} tone="neutral" />
+                  </Pressable>
+                  {collapsed
+                    ? null
+                    : events.map((e) => (
+                        <SyllabusEventCard
+                          key={e.chunkId}
+                          event={e}
+                          done={data.doneChunkIds.has(e.chunkId)}
+                          onToggleDone={() => toggleSyllabusEventDone(e)}
+                          onAddToCalendar={() => addSyllabusEventToCalendar(e)}
                         />
-                      </Row>
-                      {e.topic ? <Body>{e.topic}</Body> : null}
-                      <Body secondary style={{ fontSize: 13 }}>
-                        {formatDateHuman(e.dateISO)} · {e.sourceFilename}
-                        {e.page ? `, p.${e.page}` : ''}
-                      </Body>
-                    </View>
-                    <Button
-                      label="Add to calendar"
-                      kind="secondary"
-                      compact
-                      onPress={() => addSyllabusEventToCalendar(e)}
-                    />
-                  </Row>
-                </Card>
+                      ))}
+                </View>
               );
             })}
           </>

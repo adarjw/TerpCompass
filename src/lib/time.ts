@@ -81,6 +81,22 @@ export function compareISODate(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** Monday of the week containing the given ISO date. */
+export function mondayOf(dateISO: string): string {
+  const dp = parseISODate(dateISO);
+  if (!dp) return dateISO;
+  const d = new Date(dp.y, dp.m - 1, dp.d, 12);
+  const offset = (d.getDay() + 6) % 7; // Mon=0 ... Sun=6
+  return addDaysISO(dateISO, -offset);
+}
+
+/** True if dateISO falls within the Mon-Sun week containing referenceISO. */
+export function isSameWeek(dateISO: string, referenceISO: string): boolean {
+  const start = mondayOf(referenceISO);
+  const end = addDaysISO(start, 6);
+  return compareISODate(dateISO, start) >= 0 && compareISODate(dateISO, end) <= 0;
+}
+
 /**
  * Every date between start and end (inclusive) that falls on one of the given
  * weekdays, minus any dates in `excluded` (holidays / breaks).

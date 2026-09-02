@@ -115,7 +115,22 @@ added, that item is recognized by its generated title+date and drops off the
 "detected" list so it isn't shown twice — it simply moves up into the
 existing "Upcoming exams & deadlines" card above it. This same detector also
 appears scoped to a single course on that course's own detail page, under
-**"Quizzes, exams & homework (from syllabus)"**.
+**"This week: quizzes, exams & homework (from syllabus)"**.
+
+**Scoped to the current week, grouped by class, tap to check off**: both the
+Dashboard card and the course-page section only show items whose date falls
+in the current Mon–Sun week (`src/lib/time.ts#isSameWeek`) — a syllabus with
+frequent quizzes/homework would otherwise dump the whole semester into one
+list. On the Dashboard, items are grouped into a collapsible section per
+class, with classes ordered by their most urgent item first (an exam this
+week outranks a quiz outranks a homework item — see
+`compareSyllabusEventPriority`). Tapping anywhere on an item (other than the
+"Add to calendar" button) toggles it done — a lightweight personal
+checklist, stored in the `syllabus_event_completions` table (keyed by the
+resource chunk the item was detected from, since detected items aren't
+persisted rows of their own). Unlike the date filter, "done" status doesn't
+currently carry an item over into future weeks or hide it — it's a per-week
+checkbox, not a running to-do list.
 
 ## Multi-section courses
 
@@ -202,7 +217,7 @@ can generate richer catch-up plans, quizzes, and summaries — but:
 | AI provider abstraction (local + opt-in CLI) | `src/lib/ai/` |
 | Email / cancellation detection | `src/lib/email.ts`, `src/app/email.tsx` |
 | Dashboard (missed classes, open plans, repeated topics) | `src/app/(tabs)/dashboard.tsx` |
-| Quiz/exam/homework dates detected from syllabi | `src/lib/syllabusDates.ts` |
+| Quiz/exam/homework dates detected from syllabi | `src/lib/syllabusDates.ts`, `src/components/SyllabusEventCard.tsx` |
 | JSON backup / restore, delete-all-data | `src/lib/backup.ts`, `src/app/(tabs)/settings.tsx` |
 | Absence-notice email drafts (5 reason templates, mailto: hand-off) | `src/lib/emailDrafts.ts` |
 | Timestamped class notes per session | `src/app/session/[id].tsx` |

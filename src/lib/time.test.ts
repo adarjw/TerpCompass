@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { datesForPattern, localDateTime, parseTime, addDaysISO } from './time';
+import { datesForPattern, isSameWeek, localDateTime, mondayOf, parseTime, addDaysISO } from './time';
 
 describe('datesForPattern', () => {
   it('generates weekly recurring dates across a DST spring-forward transition', () => {
@@ -45,5 +45,39 @@ describe('parseTime', () => {
 describe('addDaysISO', () => {
   it('rolls over month and year boundaries', () => {
     expect(addDaysISO('2026-12-30', 5)).toBe('2027-01-04');
+  });
+});
+
+describe('mondayOf', () => {
+  it('returns the same date when given a Monday', () => {
+    expect(mondayOf('2026-08-31')).toBe('2026-08-31');
+  });
+
+  it('returns the preceding Monday for a mid-week date', () => {
+    // 2026-09-01 is a Tuesday.
+    expect(mondayOf('2026-09-01')).toBe('2026-08-31');
+  });
+
+  it('returns the preceding Monday for a Sunday', () => {
+    expect(mondayOf('2026-09-06')).toBe('2026-08-31');
+  });
+});
+
+describe('isSameWeek', () => {
+  it('is true for two dates in the same Mon-Sun week', () => {
+    expect(isSameWeek('2026-09-01', '2026-09-04')).toBe(true);
+  });
+
+  it('is true for the week boundaries themselves', () => {
+    expect(isSameWeek('2026-08-31', '2026-09-01')).toBe(true);
+    expect(isSameWeek('2026-09-06', '2026-09-01')).toBe(true);
+  });
+
+  it('is false for a date in the following week', () => {
+    expect(isSameWeek('2026-09-07', '2026-09-01')).toBe(false);
+  });
+
+  it('is false for a date in the previous week', () => {
+    expect(isSameWeek('2026-08-30', '2026-09-01')).toBe(false);
   });
 });

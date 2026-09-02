@@ -19,6 +19,7 @@ import {
   Title,
   FONT,
 } from '@/components/ui';
+import { SyllabusEventCard } from '@/components/SyllabusEventCard';
 import {
   absencesRepo,
   chunksRepo,
@@ -28,12 +29,18 @@ import {
   patternsRepo,
   planetTerpCacheRepo,
   resourcesRepo,
+  syllabusCompletionsRepo,
   type CalendarEvent,
 } from '@/db/repo';
 import { findBuilding } from '@/lib/campus';
 import type { DetectedContacts } from '@/lib/syllabus';
-import { detectSyllabusEvents, SYLLABUS_EVENT_LABEL, type DetectedSyllabusEvent } from '@/lib/syllabusDates';
-import { compareISODate, formatDateHuman, formatTime12, toISODate } from '@/lib/time';
+import {
+  compareSyllabusEventPriority,
+  detectSyllabusEvents,
+  SYLLABUS_EVENT_LABEL,
+  type DetectedSyllabusEvent,
+} from '@/lib/syllabusDates';
+import { formatDateHuman, formatTime12, isSameWeek, toISODate } from '@/lib/time';
 import type {
   Absence,
   CampusLocation,
@@ -85,6 +92,7 @@ export default function CourseScreen() {
   const [confirmRemoveResource, setConfirmRemoveResource] = useState<Resource | null>(null);
   const [chunks, setChunks] = useState<ResourceChunk[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [doneChunkIds, setDoneChunkIds] = useState<Set<string>>(new Set());
 
   useFocusEffect(
     useCallback(() => {
@@ -98,6 +106,7 @@ export default function CourseScreen() {
         setAbsences(await absencesRepo.forCourse(db, id));
         setChunks(await chunksRepo.forCourse(db, id));
         setCalendarEvents(await eventsRepo.all(db));
+        setDoneChunkIds(await syllabusCompletionsRepo.all(db));
         if (loaded) {
           const cached = await planetTerpCacheRepo.get<PlanetTerpEnrichment>(db, loaded.code);
           setEnrich(cached?.payload ?? null);
@@ -110,9 +119,9 @@ export default function CourseScreen() {
   if (!course) return <Loading />;
 
   // Quiz/exam/homework dates auto-detected from this course's own syllabus
-  // (see src/lib/syllabusDates.ts) — same detector and "Add to calendar"
-  // dedup pattern as the Dashboard's aggregate view, scoped to just this
-  // course so it reads as "what's coming up in this class."
+  // (see src/lib/syllabusDates.ts) — same detector, week scope, and "Add to
+  // calendar" dedup pattern as the Dashboard's aggregate view, here scoped
+  // to just this course so it reads as "what's coming up in this class."
   const courseSyllabusTitleFor = (event: DetectedSyllabusEvent) => {
     const label = SYLLABUS_EVENT_LABEL[event.kind];
     const topic = event.topic ? ` — ${event.topic}` : '';
@@ -120,9 +129,10 @@ export default function CourseScreen() {
   };
   const today = toISODate(new Date());
   const existingCourseEventKeys = new Set(calendarEvents.map((e) => `${e.date}|${e.title}`));
-  const upcomingCourseSyllabusEvents = detectSyllabusEvents(chunks)
-    .filter((e) => compareISODate(e.dateISO, today) >= 0)
-    .filter((e) => !existingCourseEventKeys.has(`${e.dateISO}|${courseSyllabusTitleFor(e)}`));
+  const thisWeekCourseSyllabusEvents = detectSyllabusEvents(chunks)
+    .filter((e) => isSameWeek(e.dateISO, today))
+    .filter((e) => !existingCourseEventKeys.has(`${e.dateISO}|${courseSyllabusTitleFor(e)}`))
+    .sort(compareSyllabusEventPriority);
 
   const addCourseSyllabusEventToCalendar = async (event: DetectedSyllabusEvent) => {
     if (!db) return;
@@ -134,6 +144,12 @@ export default function CourseScreen() {
         kind: event.kind === 'exam' ? 'exam' : 'deadline',
       },
     ]);
+    bump();
+  };
+
+  const toggleCourseSyllabusEventDone = async (event: DetectedSyllabusEvent) => {
+    if (!db) return;
+    await syllabusCompletionsRepo.setDone(db, event.chunkId, !doneChunkIds.has(event.chunkId));
     bump();
   };
 
@@ -342,31 +358,17 @@ export default function CourseScreen() {
           </Row>
         </Card>
 
-        {upcomingCourseSyllabusEvents.length > 0 ? (
+        {thisWeekCourseSyllabusEvents.length > 0 ? (
           <>
-            <Subtitle>Quizzes, exams & homework (from syllabus)</Subtitle>
-            {upcomingCourseSyllabusEvents.map((e) => (
-              <Card key={e.chunkId} style={{ paddingVertical: 12 }}>
-                <Row style={{ justifyContent: 'space-between' }}>
-                  <View style={{ flex: 1 }}>
-                    <Badge
-                      label={SYLLABUS_EVENT_LABEL[e.kind]}
-                      tone={e.kind === 'exam' ? 'danger' : e.kind === 'quiz' ? 'warning' : 'neutral'}
-                    />
-                    {e.topic ? <Body style={{ marginTop: 4 }}>{e.topic}</Body> : null}
-                    <Body secondary style={{ fontSize: 13 }}>
-                      {formatDateHuman(e.dateISO)} · {e.sourceFilename}
-                      {e.page ? `, p.${e.page}` : ''}
-                    </Body>
-                  </View>
-                  <Button
-                    label="Add to calendar"
-                    kind="secondary"
-                    compact
-                    onPress={() => addCourseSyllabusEventToCalendar(e)}
-                  />
-                </Row>
-              </Card>
+            <Subtitle>This week: quizzes, exams & homework (from syllabus)</Subtitle>
+            {thisWeekCourseSyllabusEvents.map((e) => (
+              <SyllabusEventCard
+                key={e.chunkId}
+                event={e}
+                done={doneChunkIds.has(e.chunkId)}
+                onToggleDone={() => toggleCourseSyllabusEventDone(e)}
+                onAddToCalendar={() => addCourseSyllabusEventToCalendar(e)}
+              />
             ))}
           </>
         ) : null}

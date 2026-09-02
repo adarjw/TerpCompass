@@ -129,6 +129,7 @@ export async function wipeScheduleData(): Promise<void> {
     DELETE FROM notifications;
     DELETE FROM catch_up_tasks;
     DELETE FROM catch_up_plans;
+    DELETE FROM syllabus_event_completions;
     DELETE FROM extracted_resource_chunks;
     DELETE FROM resources;
     DELETE FROM absences;
@@ -149,6 +150,7 @@ export async function wipeAllData(): Promise<void> {
     DELETE FROM notifications;
     DELETE FROM catch_up_tasks;
     DELETE FROM catch_up_plans;
+    DELETE FROM syllabus_event_completions;
     DELETE FROM extracted_resource_chunks;
     DELETE FROM resources;
     DELETE FROM absences;
