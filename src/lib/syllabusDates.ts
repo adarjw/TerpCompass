@@ -8,6 +8,7 @@
  * explicit date on — nothing here invents a date or a kind.
  */
 
+import { COLUMN_SEP } from './pdf';
 import { detectTopic } from './syllabus';
 import type { ResourceChunk } from './types';
 
@@ -167,19 +168,32 @@ export function detectSyllabusEvents(chunks: ResourceChunk[]): DetectedSyllabusE
       const chunk = ordered[i];
       if (!chunk.detectedDate) continue;
 
-      const kind = classifyKind(chunk.text);
-      if (kind) {
+      // A PDF table row reconstructed with column separators (see
+      // pdf.ts#textFromContentStream) can genuinely hold two independent
+      // events in one row — e.g. a "Quiz" column and a separate "Matlab
+      // due" column. Check each cell on its own so both surface, rather
+      // than classifying (and keeping only) the whole row's text once. A
+      // non-table line has no separator, so `cells` is just itself — same
+      // single-classification behavior as before.
+      const cells = chunk.text.includes(COLUMN_SEP)
+        ? chunk.text.split(COLUMN_SEP).map((c) => c.trim()).filter(Boolean)
+        : [chunk.text];
+      let matchedAny = false;
+      for (const cell of cells) {
+        const kind = classifyKind(cell);
+        if (!kind) continue;
+        matchedAny = true;
         out.push({
           kind,
           dateISO: chunk.detectedDate,
-          topic: chunk.detectedTopic,
+          topic: cells.length > 1 ? (detectTopic(cell) ?? chunk.detectedTopic) : chunk.detectedTopic,
           courseId: chunk.courseId,
           sourceFilename: chunk.sourceFilename,
           page: chunk.page,
           chunkId: chunk.id,
         });
-        continue;
       }
+      if (matchedAny) continue;
 
       const neighborText = findNeighborKeywordText(ordered, i);
       if (!neighborText) continue;

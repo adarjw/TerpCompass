@@ -58,16 +58,62 @@ function decodePdfString(raw: string): string {
   return out;
 }
 
-/** Pull text shown by Tj / TJ / ' / " operators out of one content stream. */
+/** Inserted between cells reconstructed onto the same table row (see
+ * textFromContentStream) — a visible, unambiguous separator rather than a
+ * raw tab, since it can end up shown verbatim in a citation quote. Exported
+ * so downstream text analysis (syllabusDates.ts) can recognize a
+ * reconstructed row and check each cell independently, rather than
+ * treating the whole row as one blob. */
+export const COLUMN_SEP = ' | ';
+
+/**
+ * Pull text shown by Tj / TJ / ' / " operators out of one content stream.
+ *
+ * Td/TD (the "move to next line" operators) take two numeric operands,
+ * tx and ty. A pure vertical move (ty far from 0) is genuinely a new line,
+ * but many simple PDF generators lay out a table row as a sequence of
+ * *horizontal-only* Td moves — one per cell, ty == 0 — rather than one
+ * flowing text run. Treating every Td/TD as "insert a newline" (the
+ * previous behavior) merges an entire table row's cells, header included,
+ * into indistinguishable running text; a syllabus schedule table's date
+ * column and its neighboring "due"/quiz-day column would end up read as
+ * one blob, or worse, a header row's column labels would bleed into every
+ * data row below it once chunked by line.
+ *
+ * Distinguishing the two lets each table row survive as its own line, with
+ * its cells still recognizably separated by `COLUMN_SEP` rather than
+ * silently concatenated — meaningfully more useful to the exam/quiz/
+ * homework detector in syllabusDates.ts than either alternative. This is
+ * still a heuristic, not real layout parsing: PDFs that instead position
+ * every cell with an absolute text matrix (Tm) rather than relative Td
+ * moves don't match this pattern at all, and fall back to the old
+ * one-newline-per-move behavior unchanged.
+ */
 function textFromContentStream(stream: string): string {
   const parts: string[] = [];
   // Balanced-enough literal string matcher: PDF strings rarely nest in Tj args.
-  const re = /\((?:[^()\\]|\\.)*\)\s*(Tj|')|\[((?:[^\][\\]|\\.)*)\]\s*TJ|T\*|Td|TD/g;
+  const re =
+    /\((?:[^()\\]|\\.)*\)\s*(Tj|')|\[((?:[^\][\\]|\\.)*)\]\s*TJ|(-?[\d.]+)\s+(-?[\d.]+)\s+(Td|TD)|T\*|Td|TD/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(stream)) !== null) {
     const token = m[0];
+    if (m[5] === 'Td' || m[5] === 'TD') {
+      // Numbered case: we know tx/ty, so we can tell a same-row column
+      // move from an actual new line.
+      const tx = parseFloat(m[3]);
+      const ty = parseFloat(m[4]);
+      const sameRow = Math.abs(ty) < 0.01 && tx > 0.01;
+      const last = parts[parts.length - 1];
+      if (sameRow) {
+        if (parts.length > 0 && last !== COLUMN_SEP && last !== '\n') parts.push(COLUMN_SEP);
+      } else if (parts.length > 0 && last !== '\n') {
+        parts.push('\n');
+      }
+      continue;
+    }
     if (token === 'T*' || token === 'Td' || token === 'TD') {
-      // Text positioning: often a new line.
+      // Bare fallback (operands didn't match the numbered pattern, or T*
+      // which has none): same as the old behavior, always a new line.
       if (parts.length > 0 && parts[parts.length - 1] !== '\n') parts.push('\n');
       continue;
     }
@@ -88,6 +134,7 @@ function textFromContentStream(stream: string): string {
     .join('')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
+    .replace(/(\s*\|\s*)+$/gm, '') // trailing empty cells at end of a row
     .trim();
 }
 
