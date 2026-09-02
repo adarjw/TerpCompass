@@ -2,7 +2,7 @@
 
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 
 import {
   Body,
@@ -21,6 +21,7 @@ import { prefersAppleMapsForCurrentDevice } from '@/lib/browserEnv';
 import { makeId } from '@/lib/ids';
 import type { CampusLocation } from '@/lib/types';
 import { bestMapUrl } from '@/lib/walking';
+import { openExternalUrl } from '@/services/externalLinks';
 import { useApp } from '@/state/AppContext';
 
 export default function BuildingsScreen() {
@@ -183,7 +184,7 @@ export default function BuildingsScreen() {
                     compact
                     icon="navigate-outline"
                     onPress={() =>
-                      Linking.openURL(bestMapUrl(loc, loc.name, prefersAppleMapsForCurrentDevice(Platform.OS)))
+                      openExternalUrl(bestMapUrl(loc, loc.name, prefersAppleMapsForCurrentDevice(Platform.OS)))
                     }
                   />
                 </View>
