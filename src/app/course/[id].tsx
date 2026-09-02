@@ -2,7 +2,7 @@
 
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Linking, Platform, ScrollView, View } from 'react-native';
+import { Platform, ScrollView, View } from 'react-native';
 
 import {
   Badge,
@@ -53,6 +53,7 @@ import type {
 } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
 import { bestMapUrl } from '@/lib/walking';
+import { openExternalUrl } from '@/services/externalLinks';
 import {
   attachFileResource,
   attachTextResource,
@@ -332,7 +333,7 @@ export default function CourseScreen() {
                   kind="ghost"
                   compact
                   onPress={() =>
-                    Linking.openURL(
+                    openExternalUrl(
                       bestMapUrl(loc, where || course.code, prefersAppleMapsForCurrentDevice(Platform.OS)),
                     )
                   }

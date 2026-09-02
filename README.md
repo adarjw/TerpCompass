@@ -196,6 +196,19 @@ the app manually. `prefersAppleMaps` falls back to UA-sniffing (the same
 scheme regardless of which build it's running — a first-party OS-level
 handler that doesn't have this failure mode.
 
+Picking the right link wasn't the whole story, though: on web,
+`src/services/externalLinks.ts#openExternalUrl` is used instead of calling
+`Linking.openURL` directly. React Native Web's `Linking.openURL`
+ultimately calls `window.open(url, '_blank', 'noopener')` — and
+`window.open()` is a well-documented iOS Safari/PWA quirk: it does not
+reliably trigger a Universal Link hand-off to an installed app (Apple Maps
+or Google Maps), even from a genuine tap — it just loads the URL as an
+ordinary web page. A real click on an actual `<a>` element does trigger the
+hand-off correctly, so `openExternalUrl` synthesizes and clicks one instead,
+purely on the web build; native builds still call `Linking.openURL` as
+before, since there `Linking` goes straight to the OS's URL-scheme
+dispatcher and was never affected by this.
+
 ## What works without any AI / API keys
 
 Everything. The entire app — schedule import, the home "where am I supposed

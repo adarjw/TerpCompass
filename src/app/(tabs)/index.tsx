@@ -6,7 +6,7 @@
 
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Animated, Easing, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 import {
   Badge,
@@ -45,6 +45,7 @@ import { formatCountdown, formatDateHuman, formatTime12, toISODate } from '@/lib
 import type { CampusLocation, SessionImportance, WalkRecording, WalkStartPoint } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WALK_START_POINT_LABEL } from '@/lib/types';
 import { bestMapUrl, estimateWalkWithRecordings, leaveAt, type WalkEstimate } from '@/lib/walking';
+import { openExternalUrl } from '@/services/externalLinks';
 import { useApp } from '@/state/AppContext';
 
 interface HomeData {
@@ -425,7 +426,7 @@ function FocusCard({
   const daysAway = Math.ceil(msUntilStart / 86400000);
 
   const openDirections = () => {
-    Linking.openURL(bestMapUrl(loc, building || course.code, prefersAppleMapsForCurrentDevice(Platform.OS)));
+    openExternalUrl(bestMapUrl(loc, building || course.code, prefersAppleMapsForCurrentDevice(Platform.OS)));
   };
 
   // Progressive urgency for the header's right side: far-off classes stay
