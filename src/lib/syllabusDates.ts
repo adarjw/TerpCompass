@@ -19,19 +19,52 @@ export const SYLLABUS_EVENT_LABEL: Record<SyllabusEventKind, string> = {
   homework: 'Homework/Project',
 };
 
+/** Lower sorts first — an exam outranks a quiz outranks a homework item
+ * when a student needs to decide what to look at first this week. */
+export const SYLLABUS_EVENT_PRIORITY: Record<SyllabusEventKind, number> = {
+  exam: 0,
+  quiz: 1,
+  homework: 2,
+};
+
+/** Soonest date first, exam-before-quiz-before-homework on a tied date. */
+export function compareSyllabusEventPriority(
+  a: DetectedSyllabusEvent,
+  b: DetectedSyllabusEvent,
+): number {
+  if (a.dateISO !== b.dateISO) return a.dateISO < b.dateISO ? -1 : 1;
+  return SYLLABUS_EVENT_PRIORITY[a.kind] - SYLLABUS_EVENT_PRIORITY[b.kind];
+}
+
+// Item words that count as a deliverable when followed by "due" (an item
+// name alone, like a stray "project" mentioned in passing, is too generic
+// to trust on its own).
+const DUE_ITEM = '(?:project|paper|assignment|problem set|pset|hw|homework|deliverable|lab report)';
+// Words specific enough to trust as an event on their own, without needing
+// "due" nearby — a scheduled presentation or capstone is a dated event by
+// nature, not something that merely gets "turned in."
+const STANDALONE_HOMEWORK = /\bpresentations?\b|\bcapstone\b/i;
+
 // Checked in order, first match wins — a chunk mentioning both "exam" and
 // "due" (e.g. "Midterm review due before exam") is an exam, not a deadline.
 // "midterm"/"final" alone don't count as the exam itself when immediately
-// followed by "review" ("Midterm review session" is a lead-up class, not
-// the exam) — the actual exam gets its own dated line elsewhere.
+// followed by one of these — each is a real false-positive found via
+// testing: "review" ("Midterm review session" is a lead-up class, not the
+// exam), "grade" ("10% of the final grade" is unrelated policy text), and
+// "project"/"paper"/"presentation" ("Final project presentations" is a
+// homework/project deliverable, not the final exam). The actual exam gets
+// its own dated line elsewhere.
 const KIND_PATTERNS: { kind: SyllabusEventKind; pattern: RegExp }[] = [
-  { kind: 'exam', pattern: /\bexam\b|\b(?:midterm|final)\b(?!\s+review)/i },
+  {
+    kind: 'exam',
+    pattern: /\bexam\b|\b(?:midterm|final)\b(?!\s+(?:review|grade|project|paper|presentations?))/i,
+  },
   { kind: 'quiz', pattern: /\b(quiz|test)\b/i },
   {
     kind: 'homework',
-    pattern:
-      /\b(project|paper|assignment|problem set|pset|hw|homework)\s*(#?\d+)?\s*(is\s+)?due\b|\bdue\b/i,
+    pattern: new RegExp(`\\b${DUE_ITEM}\\s*(#?\\d+)?\\s*(is\\s+)?due\\b|\\bdue\\b`, 'i'),
   },
+  { kind: 'homework', pattern: STANDALONE_HOMEWORK },
 ];
 
 // Used only when borrowing a keyword from a *neighboring* chunk (see
@@ -48,8 +81,9 @@ const NEIGHBOR_KIND_PATTERNS: { kind: SyllabusEventKind; pattern: RegExp }[] = [
   { kind: 'quiz', pattern: /\b(quiz|test)\b/i },
   {
     kind: 'homework',
-    pattern: /\b(project|paper|assignment|problem set|pset|hw|homework)\s*(#?\d+)?\s*(is\s+)?due\b/i,
+    pattern: new RegExp(`\\b${DUE_ITEM}\\s*(#?\\d+)?\\s*(is\\s+)?due\\b`, 'i'),
   },
+  { kind: 'homework', pattern: STANDALONE_HOMEWORK },
 ];
 
 function classifyKind(
@@ -162,5 +196,5 @@ export function detectSyllabusEvents(chunks: ResourceChunk[]): DetectedSyllabusE
       });
     }
   }
-  return out.sort((a, b) => (a.dateISO < b.dateISO ? -1 : a.dateISO > b.dateISO ? 1 : 0));
+  return out.sort(compareSyllabusEventPriority);
 }

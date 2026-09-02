@@ -636,6 +636,32 @@ export const eventsRepo = {
   },
 };
 
+// ---------- syllabus-detected event completions ----------
+
+/**
+ * Detected quiz/exam/homework items (src/lib/syllabusDates.ts) aren't
+ * persisted as rows of their own — they're recomputed from
+ * extracted_resource_chunks on every read — so "checked off" state is kept
+ * separately, keyed by the chunk id the item was detected from.
+ */
+export const syllabusCompletionsRepo = {
+  /** Chunk ids the student has marked done. */
+  async all(db: SqlExecutor): Promise<Set<string>> {
+    const rows = await db.getAllAsync(`SELECT chunk_id FROM syllabus_event_completions`);
+    return new Set(rows.map((r) => str(r.chunk_id)));
+  },
+  async setDone(db: SqlExecutor, chunkId: string, done: boolean): Promise<void> {
+    if (done) {
+      await db.runAsync(
+        `INSERT OR REPLACE INTO syllabus_event_completions (chunk_id, completed_at) VALUES (?, ?)`,
+        [chunkId, new Date().toISOString()],
+      );
+    } else {
+      await db.runAsync(`DELETE FROM syllabus_event_completions WHERE chunk_id = ?`, [chunkId]);
+    }
+  },
+};
+
 // ---------- class notes ----------
 
 function rowToNote(r: SqlRow): ClassNote {

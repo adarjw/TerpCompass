@@ -35,19 +35,10 @@ import { wipeScheduleData } from '@/db/database';
 import { coursesRepo, patternsRepo, sessionsRepo } from '@/db/repo';
 import { deleteAllSandboxFiles } from '@/services/files';
 import { sessionEnd, sessionStart, sessionsOn, whereShouldIBe } from '@/lib/sessions';
-import { addDaysISO, formatCountdown, formatTime12, parseISODate, toISODate } from '@/lib/time';
+import { addDaysISO, formatCountdown, formatTime12, mondayOf, parseISODate, toISODate } from '@/lib/time';
 import type { ClassSession, Course, MeetingPattern } from '@/lib/types';
 import { MEETING_COMPONENT_LABEL, WEEKDAY_SHORT } from '@/lib/types';
 import { useApp } from '@/state/AppContext';
-
-/** Monday of the week containing the given ISO date. */
-function mondayOf(dateISO: string): string {
-  const dp = parseISODate(dateISO);
-  if (!dp) return dateISO;
-  const d = new Date(dp.y, dp.m - 1, dp.d, 12);
-  const offset = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
-  return addDaysISO(dateISO, -offset);
-}
 
 function monthDayLabel(dateISO: string): string {
   const dp = parseISODate(dateISO);

@@ -207,6 +207,36 @@ describe('detectSyllabusEvents', () => {
     expect(events).toHaveLength(0);
   });
 
+  it('classifies a dated presentation line as homework/project, without needing "due"', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '2026-11-10: Final project presentations', detectedDate: '2026-11-10' }),
+    ]);
+    expect(events[0].kind).toBe('homework');
+  });
+
+  it('classifies a dated capstone line as homework/project', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '2026-12-01: Capstone showcase', detectedDate: '2026-12-01' }),
+    ]);
+    expect(events[0].kind).toBe('homework');
+  });
+
+  it('classifies a dated lab-report-due line as homework/project', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '2026-10-05: Lab report due', detectedDate: '2026-10-05' }),
+    ]);
+    expect(events[0].kind).toBe('homework');
+  });
+
+  it('matches "presentation" across a neighbor chunk too', () => {
+    const events = detectSyllabusEvents([
+      chunk({ text: '11/10', detectedDate: '2026-11-10', ordinal: 1 }),
+      chunk({ text: 'Final Project Presentations', detectedDate: null, ordinal: 2 }),
+    ]);
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('homework');
+  });
+
   it('sorts multiple events soonest first', () => {
     const events = detectSyllabusEvents([
       chunk({ text: '2026-12-10: Final exam', detectedDate: '2026-12-10' }),
