@@ -89,3 +89,61 @@ describe('chunkResourceText topic detection end-to-end', () => {
     expect(chunks[0].text).toMatch(/Problem Set 3 due/);
   });
 });
+
+describe('chunkResourceText merges a keyword line with its date on the next line', () => {
+  function chunkText(text: string) {
+    let n = 0;
+    return chunkResourceText(
+      { resourceId: 'r1', courseId: 'c1', sourceFilename: 'physics.pdf', pages: [{ page: 1, text }], defaultYear: 2026 },
+      () => `id-${n++}`,
+    );
+  }
+
+  it('joins a bare "midterm" line to a dateless line into one dated chunk', () => {
+    // Reported real-world case: a prose syllabus names the exam on one
+    // line and puts its date entirely on the next, rather than sharing a
+    // line with it.
+    const chunks = chunkText('Midterm 2 will be held on\nNovember 10th.');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].detectedDate).toBe('2026-11-10');
+    expect(chunks[0].text).toBe('Midterm 2 will be held on November 10th.');
+  });
+
+  it('does the same for "exam" and "quiz"', () => {
+    expect(chunkText('The final exam is scheduled for\nDecember 15.')[0].detectedDate).toBe('2026-12-15');
+    expect(chunkText('There will be a quiz on\nSeptember 22.')[0].detectedDate).toBe('2026-09-22');
+  });
+
+  it('keeps two consecutive keyword+wrapped-date pairs separate, not conflated', () => {
+    const chunks = chunkText(
+      'Midterm 1 will be held on\nOctober 6th.\nMidterm 2 will be held on\nNovember 10th.',
+    );
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0].detectedDate).toBe('2026-10-06');
+    expect(chunks[1].detectedDate).toBe('2026-11-10');
+  });
+
+  it('does not merge when the next line has its own keyword (a different exam, not a continuation)', () => {
+    const chunks = chunkText('Midterm 1 will be announced later.\nMidterm 2: October 6th.');
+    // The first line has no date and gets swept into a plain paragraph
+    // chunk instead of wrongly grabbing the second midterm's date.
+    const dated = chunks.filter((c) => c.detectedDate);
+    expect(dated).toHaveLength(1);
+    expect(dated[0].detectedDate).toBe('2026-10-06');
+    expect(dated[0].text).not.toContain('announced later');
+  });
+
+  it('leaves a keyword line with its own date untouched (no unnecessary merge)', () => {
+    const chunks = chunkText('Midterm 1: October 6th\nMidterm 2: November 10th');
+    expect(chunks).toHaveLength(2);
+    expect(chunks[0].detectedDate).toBe('2026-10-06');
+    expect(chunks[1].detectedDate).toBe('2026-11-10');
+  });
+
+  it('does not merge a keyword-less line even if the next line has a date', () => {
+    const chunks = chunkText('Office hours are Tuesdays.\nOctober 6th is a holiday.');
+    // No exam/quiz/midterm keyword involved at all — ordinary text stays
+    // exactly as chunked before this fix.
+    expect(chunks.some((c) => c.text.includes('Office hours are Tuesdays. October'))).toBe(false);
+  });
+});

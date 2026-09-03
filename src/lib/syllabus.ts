@@ -152,6 +152,43 @@ export interface ChunkInput {
   defaultYear: number;
 }
 
+/** midterm/exam/quiz specifically — narrow enough that merging a line
+ * across a wrap stays low-risk; "due" or "homework" are left out since
+ * they're common enough in ordinary policy prose to risk merging
+ * unrelated lines. */
+const KEYWORD_LINE_RE = /\b(midterm|exam|quiz)\b/i;
+
+/**
+ * A prose sentence naming an exam/quiz sometimes puts the keyword on one
+ * physical line and its date entirely on the next ("Midterm 2 will be held
+ * on\nNovember 10th."), rather than either sharing a line with the date
+ * (already handled) or splitting the date itself mid-token. When a line has
+ * the keyword but no date of its own, and the very next line has a date but
+ * no keyword of its own (so it isn't a different exam's own line), join
+ * them so the merged line carries both — same "date must be literally
+ * present" rule as everywhere else, just no longer required to be on one
+ * physical line to begin with.
+ */
+function mergeKeywordDateWraps(text: string, defaultYear: number): string {
+  const lines = text.split(/\r\n|\n|\r/);
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (trimmed && KEYWORD_LINE_RE.test(trimmed) && !detectDate(trimmed, defaultYear)) {
+      const next = lines[i + 1];
+      const nextTrimmed = next?.trim();
+      if (nextTrimmed && detectDate(nextTrimmed, defaultYear) && !KEYWORD_LINE_RE.test(nextTrimmed)) {
+        out.push(`${line} ${nextTrimmed}`);
+        i++; // consumed the next line
+        continue;
+      }
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 /**
  * Split extracted text into line-group chunks, tagging each with any
  * detected date and topic. Chunks are small (a schedule row or paragraph)
@@ -163,7 +200,8 @@ export function chunkResourceText(
 ): ResourceChunk[] {
   const chunks: ResourceChunk[] = [];
   let ordinal = 0;
-  for (const { page, text } of input.pages) {
+  for (const { page, text: rawText } of input.pages) {
+    const text = mergeKeywordDateWraps(rawText, input.defaultYear);
     // Group into paragraphs, but keep single schedule-like lines separate.
     const lines = text.split(/\r\n|\n|\r/);
     let buffer: string[] = [];

@@ -100,16 +100,26 @@ absolute text matrix (`Tm`) instead of relative `Td` moves don't match the
 pattern and fall back to the pre-existing (non-table-aware) behavior
 unchanged — still no worse than before, just no better either.
 
-Real syllabi format dates and event descriptions inconsistently, so there's
-a windowed fallback: `chunkResourceText` isolates any date-bearing line into
-its own small chunk, which means a two-line "Important Dates" list item
-("10/15" on one line, "Midterm Exam" on the next) or a sentence hard-wrapped
-across lines by PDF extraction ("The final exam is scheduled for\nDecember
-15th...") splits the date and the keyword into separate chunks that would
-otherwise never be compared. `detectSyllabusEvents` looks up to 2 chunks
-either side, within the same resource, for a keyword — but only in
-neighbors that have no detected date of their own, so a date sitting next to
-a *different*, separately-dated schedule row is never misattributed.
+Real syllabi format dates and event descriptions inconsistently, so there
+are two complementary fixes, applied at different stages. Before chunking,
+`chunkResourceText` first runs `mergeKeywordDateWraps`: if a line names
+"midterm"/"exam"/"quiz" but has no date of its own, and the very next line
+has a date but no keyword of its own (so it isn't a different exam's own
+line), the two lines are joined before anything else happens — the reported
+real case: "Midterm 2 will be held on" / "November 10th." as two separate
+lines, common in prose-style (not schedule-table) syllabi where the date
+just doesn't fit on the same line as the sentence naming it.
+
+That still leaves cases where *both* lines already have distinct content
+that shouldn't be joined outright — a two-line "Important Dates" list item
+("10/15" on one line, "Midterm Exam" on the next) or a sentence PDF
+extraction hard-wraps across lines in a way that splits the date and the
+keyword into separate chunks after the fact. For those, `chunkResourceText`
+isolates any date-bearing line into its own small chunk, and
+`detectSyllabusEvents` looks up to 2 chunks either side, within the same
+resource, for a keyword — but only in neighbors that have no detected date
+of their own, so a date sitting next to a *different*, separately-dated
+schedule row is never misattributed.
 
 This narrows, but doesn't eliminate, real gaps: a date and its keyword more
 than 2 chunks apart, or a genuinely undated reference ("the exam" without a
