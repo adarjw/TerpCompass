@@ -9,6 +9,7 @@ import {
   Body,
   Button,
   Card,
+  ConfirmModal,
   EmptyState,
   ErrorBox,
   Field,
@@ -278,39 +279,23 @@ export default function CourseScreen() {
 
   return (
     <Screen>
+      <ConfirmModal
+        visible={confirmDelete}
+        title="Delete this course?"
+        message="All sessions, absences, resources, and plans for it will be removed. This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={confirmRemoveCourse}
+        onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmModal
+        visible={confirmRemoveResource !== null}
+        title="Remove resource?"
+        message={confirmRemoveResource?.title ?? ''}
+        confirmLabel="Remove"
+        onConfirm={confirmRemoveResourceAction}
+        onCancel={() => setConfirmRemoveResource(null)}
+      />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-        {confirmDelete ? (
-          <Card style={{ borderColor: '#ff6b6b', borderWidth: 2, marginBottom: 16 }}>
-            <Title style={{ color: '#ff6b6b', marginBottom: 8 }}>Delete this course?</Title>
-            <Body secondary style={{ marginBottom: 12 }}>
-              All sessions, absences, resources, and plans for it will be removed. This cannot be undone.
-            </Body>
-            <Row style={{ gap: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Button label="Cancel" onPress={() => setConfirmDelete(false)} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button label="Delete" kind="danger-outline" onPress={confirmRemoveCourse} />
-              </View>
-            </Row>
-          </Card>
-        ) : null}
-        {confirmRemoveResource ? (
-          <Card style={{ borderColor: '#ff6b6b', borderWidth: 2, marginBottom: 16 }}>
-            <Title style={{ color: '#ff6b6b', marginBottom: 8 }}>Remove resource?</Title>
-            <Body secondary style={{ marginBottom: 12 }}>
-              {confirmRemoveResource.title}
-            </Body>
-            <Row style={{ gap: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Button label="Cancel" onPress={() => setConfirmRemoveResource(null)} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button label="Remove" kind="danger-outline" onPress={confirmRemoveResourceAction} />
-              </View>
-            </Row>
-          </Card>
-        ) : null}
         <Title>
           {course.code} · {course.name}
         </Title>

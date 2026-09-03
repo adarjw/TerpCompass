@@ -9,7 +9,7 @@ import {
   AppSwitch,
   Body,
   Button,
-  Card,
+  ConfirmModal,
   ErrorBox,
   Field,
   Loading,
@@ -145,6 +145,15 @@ function SettingsForm() {
 
   return (
     <Screen>
+      <ConfirmModal
+        visible={confirmWipe}
+        title="Delete all local data?"
+        message="Delete every course, session, absence, plan, setting, and uploaded file from this device? This cannot be undone."
+        confirmLabel="Delete everything"
+        confirmKind="danger"
+        onConfirm={deleteEverything}
+        onCancel={() => setConfirmWipe(false)}
+      />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         {error ? <ErrorBox message={error} /> : null}
 
@@ -355,24 +364,7 @@ function SettingsForm() {
           />
           <SettingRow label="Restore from backup" onPress={() => router.push('/import')} right={<Body secondary>›</Body>} />
         </SettingsGroup>
-        {!confirmWipe ? (
-          <Button label="Delete all local data" kind="danger-outline" compact onPress={() => setConfirmWipe(true)} />
-        ) : (
-          <Card>
-            <Body style={{ marginBottom: 8 }}>
-              Delete every course, session, absence, plan, setting, and uploaded file from this
-              device? This cannot be undone.
-            </Body>
-            <Row>
-              <View style={{ flex: 1 }}>
-                <Button label="Delete everything" kind="danger" onPress={deleteEverything} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button label="Cancel" kind="secondary" onPress={() => setConfirmWipe(false)} />
-              </View>
-            </Row>
-          </Card>
-        )}
+        <Button label="Delete all local data" kind="danger-outline" compact onPress={() => setConfirmWipe(true)} />
       </ScrollView>
     </Screen>
   );
