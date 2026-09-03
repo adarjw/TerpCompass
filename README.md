@@ -180,7 +180,13 @@ Every place a location is shown (Home's focus card, Course detail, Campus
 buildings) has a single **Directions** button — no app-picker dialog. It
 opens Apple Maps on iOS or Google Maps everywhere else
 (`src/lib/walking.ts#bestMapUrl`), using stored building coordinates when
-available or falling back to a named search near UMD.
+available or falling back to a named search near UMD. When coordinates are
+used, the Apple Maps link also sets `q=<building name>` alongside `daddr` —
+bare coordinates with no label left Apple Maps to reverse-geocode the pin,
+which for a specific building without its own entry in Apple's places
+database surfaced as the whole "University of Maryland" campus rather than
+the actual building; the destination itself was always correct, only the
+pin's display name wasn't.
 
 Which link to use is decided by `src/lib/browserEnv.ts#prefersAppleMaps`,
 not a bare `Platform.OS === 'ios'` check — that check alone only catches the

@@ -149,8 +149,15 @@ export function leaveAt(
 /** Deep links usable without any map SDK. */
 export function mapLinks(to: CampusLocation | null, label: string) {
   if (to?.lat != null && to?.lon != null) {
+    // `q` alongside `daddr` labels the destination pin with the actual
+    // building name instead of leaving Apple Maps to reverse-geocode bare
+    // coordinates — which, for a specific building without its own entry
+    // in Apple's places database, surfaces as the whole "University of
+    // Maryland" campus instead. The coordinates (and therefore the actual
+    // route) are unaffected either way; only the pin's display name changes.
+    const q = encodeURIComponent(label);
     return {
-      apple: `http://maps.apple.com/?daddr=${to.lat},${to.lon}&dirflg=w`,
+      apple: `http://maps.apple.com/?daddr=${to.lat},${to.lon}&q=${q}&dirflg=w`,
       google: `https://www.google.com/maps/dir/?api=1&destination=${to.lat},${to.lon}&travelmode=walking`,
     };
   }
