@@ -118,6 +118,16 @@ describe('bestMapUrl', () => {
     const url = bestMapUrl(null, 'Atlantic Building', false);
     expect(url).toContain(encodeURIComponent('Atlantic Building University of Maryland College Park'));
   });
+
+  it('labels the Apple Maps pin with the building name even when using precise coordinates', () => {
+    // Regression: bare `daddr=<lat>,<lon>` with no label left Apple Maps to
+    // reverse-geocode the pin, which for a specific building without its
+    // own Apple Places entry surfaced as the whole "University of
+    // Maryland" campus rather than the actual building.
+    const url = bestMapUrl(loc, 'Iribe Center', true);
+    expect(url).toContain(`daddr=${loc.lat},${loc.lon}`);
+    expect(url).toContain(`q=${encodeURIComponent('Iribe Center')}`);
+  });
 });
 
 describe('WALK_SPEED_PRESETS / matchWalkSpeedPreset', () => {
