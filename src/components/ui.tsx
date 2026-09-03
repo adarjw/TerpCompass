@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Modal,
   Pressable,
   StyleSheet,
   Switch,
@@ -364,6 +365,57 @@ export function Button({
         <Text style={{ color: t.fg, fontFamily: FONT.bold, fontSize: compact ? 13.5 : 15.5 }}>{label}</Text>
       </Pressable>
     </Animated.View>
+  );
+}
+
+/**
+ * A destructive-action confirmation, rendered as a true centered overlay
+ * (React Native `Modal`) rather than an inline card in the page's scroll
+ * flow. An inline card only appears wherever it happens to sit in the
+ * document — if that's above the trigger button (as it was for "Remove"
+ * on a resource list, or "Delete" on a course far down the page), the
+ * confirmation renders off-screen and the user has to scroll up to find
+ * it. A modal is always centered in the current viewport regardless of
+ * scroll position.
+ */
+export function ConfirmModal({
+  visible,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel = 'Cancel',
+  confirmKind = 'danger-outline',
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  confirmKind?: 'danger' | 'danger-outline';
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 }}>
+        <Card>
+          <Title style={{ marginBottom: 8 }}>{title}</Title>
+          <Body secondary style={{ marginBottom: 12 }}>
+            {message}
+          </Body>
+          <Row style={{ gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Button label={cancelLabel} kind="secondary" onPress={onCancel} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button label={confirmLabel} kind={confirmKind} onPress={onConfirm} />
+            </View>
+          </Row>
+        </Card>
+      </View>
+    </Modal>
   );
 }
 
